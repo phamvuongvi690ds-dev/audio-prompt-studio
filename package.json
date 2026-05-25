@@ -1,0 +1,40 @@
+{
+  "name": "audio-prompt-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Audio Script to Prompt Studio - Flow Auto separate tool",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "build": "vite build",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "electron": "latest",
+    "electron-builder": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "wait-on": "latest"
+  },
+  "build": {
+    "directories": {"output": "release"},
+    "appId": "com.flowauto.audio.prompt.studio",
+    "productName": "Audio Prompt Studio",
+    "asar": true,
+    "publish": null,
+    "files": ["dist/**/*", "electron/**/*", "vendor/whisper/**/*", "package.json"],
+    "win": {"target": [{"target": "nsis", "arch": ["x64"]}], "artifactName": "AudioPromptStudio-Setup.exe"},
+    "nsis": {"oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "Audio Prompt Studio"},
+    "mac": {"target": [{"target": "dmg", "arch": ["universal"]}], "artifactName": "AudioPromptStudio-macOS.dmg"},
+    "linux": {"target": [{"target": "AppImage", "arch": ["x64"]}], "artifactName": "AudioPromptStudio-Linux.AppImage"},
+    "asarUnpack": ["node_modules/@ffmpeg-installer/**", "vendor/whisper/**"]
+  }
+}
