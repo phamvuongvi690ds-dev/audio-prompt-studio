@@ -271,8 +271,7 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     } else {
       transcripts.push("[No audio provided, using original text only]");
     }
-    const raw=transcripts.join('
-');
+    const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||chunks.length)||chunks.length);
     console.log('[audio-prompt] desiredCount=', desiredCount, 'target=', p.targetPromptCount, 'auto=', autoCountInfo.promptCount, 'chunks=', chunks.length, 'duration=', autoCountInfo.durationSeconds);
     const sys=`You are a professional video prompt engineer. Your output MUST be a JSON array containing EXACTLY ${desiredCount} scene strings. Output text (titles, descriptions, labels, etc.) MUST be in the language specified in the EXTRA PROMPT REQUIREMENTS (default to English if not specified). Create exactly ${desiredCount} prompts/scenes. Each scene must strictly follow this exact format: Scene 01 – Short Title | Character 1: ... | Character 2: ... | Style: ... | Character voices: ... | Camera: ... | Setting: ... | Mood: ... | Audio cues: ... | Dialog: ... | Subtitles OFF/ON. Use these exact labels but translate them if a non-English language is requested. Preserve the SAME storyline, structure, and emotional intent from the original text. Do not invent a different story. Respect the user Style JSON. Dialog enabled: ${p.dialog?'yes':'no'}. Subtitles enabled: ${p.subtitles?'yes':'no'}. Apply extra prompt requirements if provided, but never override the original content. Compare the translated audio transcript with the original text if provided. The audio may be in a different language from the original text. Use BOTH sources: preserve the audio timing/order and preserve the original text meaning. If they differ, keep the core meaning of the original text but respect important details heard in the audio. Then generate final English prompts faithful to both sources.`;
