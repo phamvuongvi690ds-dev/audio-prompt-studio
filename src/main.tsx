@@ -109,12 +109,19 @@ function App() {
   async function run() {
     setStatus('Đang khởi tạo...');
     setProgress(5);
+    
+    // Nếu không có audio, mặc định tạo 1 prompt từ văn bản gốc
     let promptCount = targetPromptCount;
-    if (!promptCount && audioFile) {
-      const info = await api().info({ file: audioFile, chunkSeconds });
-      if (info?.ok) {
-        setAutoInfo(info);
-        if (info.promptCount) { promptCount = String(info.promptCount); setTargetPromptCount(promptCount); }
+    if (!promptCount) {
+      if (audioFile) {
+        const info = await api().info({ file: audioFile, chunkSeconds });
+        if (info?.ok && info.promptCount) {
+          promptCount = String(info.promptCount);
+          setTargetPromptCount(promptCount);
+        }
+      } else {
+        promptCount = "1";
+        setTargetPromptCount("1");
       }
     }
     

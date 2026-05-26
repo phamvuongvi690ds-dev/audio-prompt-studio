@@ -180,6 +180,7 @@ async function localWhisperTranscribe(file){
 }
 
 function promptCountFromDuration(file, seconds){
+  if(!file) return {durationSeconds:0, cutSeconds:Number(seconds||8), promptCount:1};
   const duration=mediaDurationSeconds(file);
   const cut=Math.max(1, Number(seconds||8)||8);
   return {durationSeconds:duration, cutSeconds:cut, promptCount:duration?Math.ceil(duration/cut):0};
@@ -247,7 +248,7 @@ ipcMain.handle('audio:info', async(_e,p={})=>{ try{ if(!p.file)return {ok:false,
 
 ipcMain.handle('audio:process', async(_e,p={})=>{
   try{
-    ensure(); if(!parseKeys(p.apiKeys||p.apiKey).length) return {ok:false,error:'missing_api_key'}; if(!p.audioFile) return {ok:false,error:'missing_audio'};
+    ensure(); if(!parseKeys(p.apiKeys||p.apiKey).length) return {ok:false,error:'missing_api_key'}; 
     const autoCountInfo=promptCountFromDuration(p.audioFile, Number(p.chunkSeconds||8));
     let chunks=[];
     let splitWarning='';
@@ -257,27 +258,21 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
       splitWarning=String(splitErr.message||splitErr);
       chunks=[p.audioFile];
     }
-    const transcripts=[];
-    const mode=String(p.transcriptionMode||'gemini');
-    if(mode==='localWhisper'){
-      const t=await localWhisperTranscribe(p.audioFile);
-      transcripts.push(t);
-      splitWarning = splitWarning ? splitWarning + ' | local_whisper_used' : 'local_whisper_used';
-    }else{
-      try{
-        const data=fs.readFileSync(p.audioFile).toString('base64');
-        const t=await gemini(p.apiKeys||p.apiKey, [{inlineData:{mimeType:mime(p.audioFile),data}}, {text:'Transcribe and translate this full audio file into clean English text. The audio may be in any language. Preserve meaning, names, numbers, tone, and scene order. Return clean translated text only.'}], 'You are a multilingual speech transcription and translation system. Transcribe the audio and translate it to English faithfully. Return only the translated transcript, no explanations.', false, 0, mode);
+        const transcripts=[];
+    if(p.audioFile) {
+      if(mode==='localWhisper'){
+        const t=await localWhisperTranscribe(p.audioFile);
         transcripts.push(t);
-      }catch(fullErr){
-        splitWarning = splitWarning ? splitWarning + ' | full_audio_transcribe_failed: ' + String(fullErr.message||fullErr) : 'full_audio_transcribe_failed: ' + String(fullErr.message||fullErr);
-        for(let i=0;i<chunks.length;i++){
-          const data=fs.readFileSync(chunks[i]).toString('base64');
-          const t=await gemini(p.apiKeys||p.apiKey, [{inlineData:{mimeType:mime(chunks[i]),data}}, {text:`Transcribe and translate this audio chunk ${i+1}/${chunks.length} into clean English text. Preserve meaning and scene order. Return clean translated text only.`}], 'You are a multilingual speech transcription and translation system. Transcribe the audio and translate it to English faithfully. Return only the translated transcript, no explanations.', false, i, mode);
-          transcripts.push(t);
-        }
+      }else{
+        const data=fs.readFileSync(p.audioFile).toString('base64');
+        const t=await gemini(p.apiKeys||p.apiKey, [{inlineData:{mimeType:mime(p.audioFile),data}}, {text:'Transcribe audio to English...'}], 'System...', false, 0, mode);
+        transcripts.push(t);
       }
+    } else {
+      transcripts.push("[No audio provided, using original text only]");
     }
-    const raw=transcripts.join('\n');
+    const raw=transcripts.join('
+');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||chunks.length)||chunks.length);
     console.log('[audio-prompt] desiredCount=', desiredCount, 'target=', p.targetPromptCount, 'auto=', autoCountInfo.promptCount, 'chunks=', chunks.length, 'duration=', autoCountInfo.durationSeconds);
     const sys=`You are a professional video prompt engineer. Your output MUST be a JSON array containing EXACTLY ${desiredCount} scene strings. Output text (titles, descriptions, labels, etc.) MUST be in the language specified in the EXTRA PROMPT REQUIREMENTS (default to English if not specified). Create exactly ${desiredCount} prompts/scenes. Each scene must strictly follow this exact format: Scene 01 – Short Title | Character 1: ... | Character 2: ... | Style: ... | Character voices: ... | Camera: ... | Setting: ... | Mood: ... | Audio cues: ... | Dialog: ... | Subtitles OFF/ON. Use these exact labels but translate them if a non-English language is requested. Preserve the SAME storyline, structure, and emotional intent from the original text. Do not invent a different story. Respect the user Style JSON. Dialog enabled: ${p.dialog?'yes':'no'}. Subtitles enabled: ${p.subtitles?'yes':'no'}. Apply extra prompt requirements if provided, but never override the original content. Compare the translated audio transcript with the original text if provided. The audio may be in a different language from the original text. Use BOTH sources: preserve the audio timing/order and preserve the original text meaning. If they differ, keep the core meaning of the original text but respect important details heard in the audio. Then generate final English prompts faithful to both sources.`;
