@@ -32,7 +32,7 @@ ipcMain.handle('dialog:readText', async (_e, p={}) => {
     if(!p.filePath) return {ok:false,error:'missing_file'};
     return {ok:true,text:fs.readFileSync(p.filePath,'utf8'),filePath:p.filePath};
   } catch(e) {
-    return {ok:false,error:String(e.message||e)};
+    console.error('[audio:process] Error:', e); return {ok:false,error: String(e.stack || e.message || e)};
   }
 });
 ipcMain.handle('config:load', async()=>{ try { return { ok:true, ...JSON.parse(fs.readFileSync(CFG,'utf8')) }; } catch { return { ok:true }; } });
@@ -243,7 +243,7 @@ function splitLongPromptText(text, count, dialog, subtitles){
   return parts;
 }
 
-ipcMain.handle('audio:info', async(_e,p={})=>{ try{ if(!p.file)return {ok:false,error:'missing_file'}; return {ok:true,...promptCountFromDuration(p.file,p.chunkSeconds)}; }catch(e){ return {ok:false,error:String(e.message||e)}; } });
+ipcMain.handle('audio:info', async(_e,p={})=>{ try{ if(!p.file)return {ok:false,error:'missing_file'}; return {ok:true,...promptCountFromDuration(p.file,p.chunkSeconds)}; }catch(e){ console.error('[audio:process] Error:', e); return {ok:false,error: String(e.stack || e.message || e)}; } });
 
 ipcMain.handle('audio:process', async(_e,p={})=>{
   try{
@@ -280,7 +280,7 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||chunks.length)||chunks.length);
     console.log('[audio-prompt] desiredCount=', desiredCount, 'target=', p.targetPromptCount, 'auto=', autoCountInfo.promptCount, 'chunks=', chunks.length, 'duration=', autoCountInfo.durationSeconds);
-    const sys=`You are a professional video prompt engineer. Your output MUST be a JSON array containing EXACTLY ${desiredCount} scene strings. ALL output text, including titles, descriptions, labels, camera notes, dialog notes, and subtitle notes, MUST be in ENGLISH only. Create exactly ${desiredCount} prompts/scenes. Do not create fewer or more. Each scene must strictly follow this exact string format: Scene 01 – Short Title | Character 1: full visual description and action pose | Character 2: [None] or full visual description | Style: full style description | Character voices: [None] or voice description | Camera: shot type | Setting: visual background and props | Mood: mood words | Audio cues: sound effects | Dialog: [None] or exact English dialog | Subtitles OFF or Subtitles ON. Use the exact labels: Character 1, Character 2, Style, Character voices, Camera, Setting, Mood, Audio cues, Dialog. Do not output JSON objects. Do not output braces. Each array item must be one clean scene string. Preserve the SAME SYSTEM, storyline, structure, characters, scene order, events, meaning, and emotional intent from the original text. Do not invent a different story. Do not change the topic, character roles, sequence of events, or core message. If the original text is Vietnamese, translate the meaning faithfully into natural English prompts. Respect the user Style JSON. Dialog enabled: ${p.dialog?'yes':'no'}. Subtitles enabled: ${p.subtitles?'yes':'no'}. Apply extra prompt requirements if provided, but never override the original content. Compare the translated audio transcript with the original text if provided. The audio may be in a different language from the original text. Use BOTH sources: preserve the audio timing/order and preserve the original text meaning. If they differ, keep the core meaning of the original text but respect important details heard in the audio. Then generate final English prompts faithful to both sources.`;
+    const sys=`You are a professional video prompt engineer. Your output MUST be a JSON array containing EXACTLY ${desiredCount} scene strings. Output text (titles, descriptions, labels, etc.) MUST be in the language specified in the EXTRA PROMPT REQUIREMENTS (default to English if not specified). Create exactly ${desiredCount} prompts/scenes. Each scene must strictly follow this exact format: Scene 01 – Short Title | Character 1: ... | Character 2: ... | Style: ... | Character voices: ... | Camera: ... | Setting: ... | Mood: ... | Audio cues: ... | Dialog: ... | Subtitles OFF/ON. Use these exact labels but translate them if a non-English language is requested. Preserve the SAME storyline, structure, and emotional intent from the original text. Do not invent a different story. Respect the user Style JSON. Dialog enabled: ${p.dialog?'yes':'no'}. Subtitles enabled: ${p.subtitles?'yes':'no'}. Apply extra prompt requirements if provided, but never override the original content. Compare the translated audio transcript with the original text if provided. The audio may be in a different language from the original text. Use BOTH sources: preserve the audio timing/order and preserve the original text meaning. If they differ, keep the core meaning of the original text but respect important details heard in the audio. Then generate final English prompts faithful to both sources.`;
     const prompt=`STYLE JSON:\n${p.styleJson||''}\n\nORIGINAL TEXT:\n${p.originalText||''}\n\nEXTRA PROMPT REQUIREMENTS:\n${p.extraRequirement||''}\n\nAUDIO TRANSCRIPT TRANSLATED TO ENGLISH:\n${raw}\n\nGenerate final prompts in ENGLISH only. Output must be a JSON array of strings only, not objects. Each string must match this format exactly: Scene 01 – Short Title | Character 1: ... | Character 2: [None] | Style: ... | Character voices: [None] | Camera: ... | Setting: ... | Mood: ... | Audio cues: ... | Dialog: [None] | Subtitles OFF. Preserve the same system, storyline, scene order, meaning, characters, and emotional intent as the original text. Do not rewrite into a different concept.`;
     const out=await gemini(p.apiKeys||p.apiKey, [{text:prompt}], sys, true, chunks.length, mode);
     let parsed; try { parsed=JSON.parse(out.replace(/^```json\s*|```$/g,'')); } catch { parsed=out; }
@@ -296,5 +296,5 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     fs.writeFileSync(resultFile, JSON.stringify(arr,null,2), 'utf8');
     const transcriptFile=path.join(OUT,'transcript-'+Date.now()+'.txt'); fs.writeFileSync(transcriptFile, raw, 'utf8');
     return {ok:true,count:Array.isArray(arr)?arr.length:1,prompts:arr,resultFile,transcriptFile,splitWarning,durationSeconds:autoCountInfo.durationSeconds,cutSeconds:autoCountInfo.cutSeconds,autoPromptCount:autoCountInfo.promptCount};
-  }catch(e){ return {ok:false,error:String(e.message||e)}; }
+  }catch(e){ console.error('[audio:process] Error:', e); return {ok:false,error: String(e.stack || e.message || e)}; }
 });

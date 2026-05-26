@@ -35,6 +35,7 @@ function App() {
   const [dialog, setDialog] = useState(false);
   const [subtitles, setSubtitles] = useState(false);
   const [status, setStatus] = useState('Sẵn sàng');
+  const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<any[]>([]);
   const [autoInfo, setAutoInfo] = useState<any>(null);
 
@@ -106,7 +107,8 @@ function App() {
   }
 
   async function run() {
-    setStatus('Đang phân tích thời lượng, cắt audio, nhận dạng văn bản và tạo prompt...');
+    setStatus('Đang khởi tạo...');
+    setProgress(5);
     let promptCount = targetPromptCount;
     if (!promptCount && audioFile) {
       const info = await api().info({ file: audioFile, chunkSeconds });
@@ -115,6 +117,10 @@ function App() {
         if (info.promptCount) { promptCount = String(info.promptCount); setTargetPromptCount(promptCount); }
       }
     }
+    
+    setStatus('Đang xử lý âm thanh và văn bản (có thể mất vài phút)...');
+    setProgress(30);
+
     const r = await api().process({
       apiKeys: apiKey,
       styleJson,
@@ -127,12 +133,18 @@ function App() {
       dialog,
       subtitles,
     });
-    if (r?.prompts) setResult(r.prompts);
+    
+    if (r?.prompts) {
+      setResult(r.prompts);
+      setProgress(100);
+    }
+    
     if (r?.ok) {
       setStatus(`Hoàn tất: ${r.count} scene • ${r.resultFile}`);
       setAutoInfo({ durationSeconds: r.durationSeconds, cutSeconds: r.cutSeconds, promptCount: r.autoPromptCount });
     } else {
-      setStatus(`Lỗi: ${r?.error}`);
+      setProgress(0);
+      setStatus(`LỖI CHI TIẾT: ${r?.error}`);
     }
   }
 
@@ -235,7 +247,14 @@ function App() {
                 <button className="icon-btn" onClick={downloadTxt} title="Tải về"><Download size={16}/></button>
               </div>
             </div>
-            <div className="status-bar">{status}</div>
+            <div className="status-bar">
+              <div className="status-text">{status}</div>
+              {progress > 0 && progress < 100 && (
+                <div className="progress-container">
+                  <div className="progress-bar" style={{ width: `${progress}%` }}></div>
+                </div>
+              )}
+            </div>
             <pre className="result-display">{promptText() || 'Chưa có kết quả...'}</pre>
           </section>
         </div>
