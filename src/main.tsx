@@ -89,7 +89,7 @@ function App() {
 
   function promptText() {
     if (!Array.isArray(result) || !result.length) return '';
-    return result.map((x: any, i: number) => typeof x === 'string' ? x : (x?.prompt || x?.text || JSON.stringify(x))).join('\n\n');
+    return result.map((x: any, i: number) => typeof x === 'string' ? x : (x?.prompt || x?.text || JSON.stringify(x))).join('\n');
   }
 
   async function copyPrompts() {
