@@ -4,11 +4,101 @@ const fs = require('fs');
 const os = require('os');
 const { spawnSync, spawn } = require('child_process');
 const installerFfmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+const { GoogleAuth } = require('google-auth-library');
 
 const isDev = !app.isPackaged;
 const BASE = path.join(os.homedir(), '.audio-prompt-studio');
 const OUT = path.join(BASE, 'output');
 const CFG = path.join(BASE, 'config.json');
+
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+function isRetryableError(data) {
+  const code = data?.error?.code;
+  const status = data?.error?.status;
+  return code === 429 || code === 500 || code === 502 || code === 503 || code === 504 || status === 'UNAVAILABLE' || status === 'RESOURCE_EXHAUSTED';
+}
+
+function fallbackModels(apiType, model) {
+  const list = apiType === 'openai'
+    ? ['gpt-4o-mini', 'gpt-4o']
+    : ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  return [model, ...list.filter(m => m !== model)];
+}
+
+async function getVertexToken(keyPath) {
+  const auth = new GoogleAuth({
+    keyFile: keyPath,
+    scopes: 'https://www.googleapis.com/auth/cloud-platform',
+  });
+  const client = await auth.getClient();
+  const token = await client.getAccessToken();
+  return token.token;
+}
+
+async function callApiGeneric({ bot, prompt }) {
+  const { apiType, baseUrl, apiKeys, keyIndex, serviceAccountPath, geminiBaseUrl, openaiBaseUrl, systemInstruction } = bot;
+  const keys = Array.isArray(apiKeys) && apiKeys.length ? apiKeys : (typeof apiKeys === 'string' ? apiKeys.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean) : ['']);
+  const models = fallbackModels(apiType, bot.model || (apiType === 'openai' ? 'gpt-4o-mini' : 'gemini-2.0-flash'));
+  let lastData = null;
+
+  for (const model of models) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const apiKey = keys[((keyIndex || 0) + attempt) % keys.length];
+      try {
+        let url, headers, body;
+        
+        if (apiType === 'gemini') {
+          const base = (geminiBaseUrl || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
+          url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          headers = { 'Content-Type': 'application/json' };
+          body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: (systemInstruction || '') + "\n\n" + prompt }] }] });
+        } else if (apiType === 'gateway') {
+          const base = (baseUrl || 'https://fisher-fare-wiley-travelling.trycloudflare.com').replace(/\/$/, '');
+          url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          headers = { 'Content-Type': 'application/json' };
+          body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: (systemInstruction || '') + "\n\n" + prompt }] }] });
+        } else if (apiType === 'vertex') {
+          const token = await getVertexToken(serviceAccountPath);
+          const keyData = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+          url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${keyData.project_id}/locations/us-central1/publishers/google/models/${model}:generateContent`;
+          headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+          body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: (systemInstruction || '') + "\n\n" + prompt }] }] });
+        } else if (apiType === 'openai') {
+          url = `${(openaiBaseUrl || 'https://api.openai.com').replace(/\/$/, '')}/v1/chat/completions`;
+          headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+          body = JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemInstruction || '' },
+              { role: 'user', content: prompt }
+            ],
+            temperature: 0.8
+          });
+        }
+
+        const response = await fetch(url, { method: 'POST', headers, body });
+        const data = await response.json();
+        lastData = data;
+        if (!data?.error) {
+          if (model !== bot.model) data._fallbackModelUsed = model;
+          return data;
+        }
+        if (!isRetryableError(data)) return data;
+        await sleep(1500 * (attempt + 1));
+      } catch (error) {
+        lastData = { error: error.message };
+        await sleep(1000 * (attempt + 1));
+      }
+    }
+  }
+  return lastData || { error: 'All retries failed.' };
+}
+
+ipcMain.handle('audio:call-api', async (event, { bot, prompt }) => {
+  return await callApiGeneric({ bot, prompt });
+});
+
 function ensure(){ fs.mkdirSync(OUT, { recursive: true }); }
 function createWindow(){
   const w = new BrowserWindow({ width: 1220, height: 820, backgroundColor: '#08111f', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false }});
@@ -37,6 +127,7 @@ ipcMain.handle('dialog:readText', async (_e, p={}) => {
 });
 ipcMain.handle('config:load', async()=>{ try { return { ok:true, ...JSON.parse(fs.readFileSync(CFG,'utf8')) }; } catch { return { ok:true }; } });
 ipcMain.handle('config:save', async(_e,p)=>{ ensure(); fs.writeFileSync(CFG, JSON.stringify(p||{}, null, 2)); return { ok:true }; });
+
 function ffmpegBin(){
   const platformDir = process.platform === 'win32' ? 'win32-x64' : process.platform === 'darwin' ? 'darwin-x64' : 'linux-x64';
   const exeName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
@@ -55,50 +146,6 @@ function runFfmpeg(args){ return spawnSync(ffmpegBin(), args, { encoding:'utf8',
 function mime(f){ const e=String(f).toLowerCase().split('.').pop(); if(e==='wav')return 'audio/wav'; if(e==='m4a')return 'audio/mp4'; return 'audio/mpeg'; }
 function parseKeys(input){ return String(input||'').split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean); }
 function waitMs(ms){ return new Promise(r=>setTimeout(r,ms)); }
-async function gemini(apiKeys, parts, system, json=false, startIndex=0){
-  const keys=parseKeys(apiKeys); if(!keys.length) throw new Error('missing_api_key');
-  const models=['gemini-2.5-flash','gemini-2.0-flash']; let last='';
-  for(let k=0;k<keys.length;k++){ const apiKey=keys[(startIndex+k)%keys.length];
-  for(const m of models){
-    try{
-      const body={ contents:[{role:'user',parts}], systemInstruction:{parts:[{text:system}]}, generationConfig:{temperature:.55} };
-      if(json) body.generationConfig.responseMimeType='application/json';
-      const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-      const o=await r.json().catch(()=>({}));
-      if(!r.ok){ const msg=o.error?.message || `http_${r.status}`; if(msg.includes('Quota exceeded') || msg.includes('quota')){ const retry=o.error?.details?.flatMap(d=>d.retryDelay?[d.retryDelay]:[])?.[0]; if(retry && keys.length===1){ const sec=Number(String(retry).replace('s',''))||0; if(sec>0 && sec<=65) await waitMs((sec+1)*1000); } last='quota_exceeded: API key/model quota exceeded. Add another Gemini API key, wait for quota reset, or paste Văn bản gốc so the app can skip audio transcription and use fewer requests.'; continue; } last=msg; continue; }
-      return (o.candidates?.[0]?.content?.parts || []).map(p=>p.text||'').join('\n').trim();
-    }catch(e){ last=String(e); }
-  }}
-  throw new Error(last || 'gemini_failed');
-}
-
-
-function mp3DurationFallback(file){
-  try{
-    const buf=fs.readFileSync(file);
-    let off=0;
-    if(buf.length>10 && buf.toString('ascii',0,3)==='ID3'){
-      off=10 + ((buf[6]&0x7f)<<21) + ((buf[7]&0x7f)<<14) + ((buf[8]&0x7f)<<7) + (buf[9]&0x7f);
-    }
-    const bitrates={
-      'V1L1':[0,32,64,96,128,160,192,224,256,288,320,352,384,416,448],
-      'V1L2':[0,32,48,56,64,80,96,112,128,160,192,224,256,320,384],
-      'V1L3':[0,32,40,48,56,64,80,96,112,128,160,192,224,256,320],
-      'V2L1':[0,32,48,56,64,80,96,112,128,144,160,176,192,224,256],
-      'V2L2':[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160],
-      'V2L3':[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160]
-    };
-    for(let i=off;i<Math.min(buf.length-4,off+200000);i++){
-      if(buf[i]===0xff && (buf[i+1]&0xe0)===0xe0){
-        const verBits=(buf[i+1]>>3)&3; const layerBits=(buf[i+1]>>1)&3; const brIdx=(buf[i+2]>>4)&15;
-        const ver=verBits===3?'V1':(verBits===2||verBits===0?'V2':''); const layer=layerBits===3?'L1':layerBits===2?'L2':layerBits===1?'L3':'';
-        const kbps=(bitrates[ver+layer]||[])[brIdx]||0;
-        if(kbps>0){ return Math.max(1, Math.round((buf.length-i)*8/(kbps*1000))); }
-      }
-    }
-  }catch{}
-  return 0;
-}
 
 function mediaDurationSeconds(file){
   try{
@@ -107,76 +154,7 @@ function mediaDurationSeconds(file){
     const m=text.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
     if(m) return Number(m[1])*3600 + Number(m[2])*60 + Number(m[3]);
   }catch{}
-  if(String(file).toLowerCase().endsWith('.mp3')) return mp3DurationFallback(file);
   return 0;
-}
-
-function vendorWhisperDir(){
-  const candidates=[
-    path.join(process.resourcesPath || '', 'vendor', 'whisper'),
-    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'vendor', 'whisper'),
-    path.join(__dirname, '..', 'vendor', 'whisper'),
-    path.join(__dirname, '..', 'app.asar.unpacked', 'vendor', 'whisper'),
-    path.join(process.cwd(), 'vendor', 'whisper'),
-  ];
-  for(const c of candidates){ try{ if(c && fs.existsSync(c)) return c; }catch{} }
-  return candidates[0];
-}
-function findWhisperExe(){
-  const dir=vendorWhisperDir();
-  const names=process.platform==='win32' ? ['whisper-cli.exe','main.exe','whisper.exe'] : ['whisper-cli','main','whisper'];
-  const nested=[path.join(dir,'Release'), path.join(dir,'bin'), dir];
-  for(const d of nested) for(const n of names){ const f=path.join(d,n); try{ if(fs.existsSync(f)) return f; }catch{} }
-  return names[0];
-}
-function findWhisperModel(){
-  const dir=vendorWhisperDir();
-  const candidates=[
-    path.join(dir,'models','ggml-tiny.bin'),
-    path.join(dir,'models','ggml-base.bin'),
-    path.join(dir,'models','ggml-small.bin'),
-    path.join(dir,'ggml-tiny.bin'),
-    path.join(dir,'ggml-base.bin'),
-    path.join(dir,'ggml-small.bin'),
-  ];
-  for(const c of candidates){ try{ if(fs.existsSync(c)) return c; }catch{} }
-  throw new Error('missing_bundled_whisper_model');
-}
-function prepareWhisperWav(file){
-  if(String(file).toLowerCase().endsWith('.wav')) return file;
-  const wav=path.join(OUT, 'whisper-input-' + Date.now() + '.wav');
-  const ff=ffmpegBin();
-  const r=spawnSync(ff, ['-y','-hide_banner','-i',file,'-vn','-ac','1','-ar','16000','-c:a','pcm_s16le',wav], { encoding:'utf8', windowsHide:true, timeout: 20*60*1000 });
-  if(r.status!==0 || !fs.existsSync(wav)){
-    const detail=(r.error ? String(r.error.message||r.error)+' | ' : '') + (r.signal ? 'signal_'+r.signal+' | ' : '') + (r.stderr||r.stdout||('exit_'+r.status));
-    throw new Error('whisper_wav_convert_failed: ffmpeg=' + ff + ' input=' + file + ' output=' + wav + ' detail=' + detail.slice(0,1500));
-  }
-  return wav;
-}
-function runProcessAsync(cmd,args,opts={}){
-  return new Promise((resolve)=>{
-    let stdout='', stderr='';
-    const child=spawn(cmd,args,{...opts, windowsHide:true});
-    child.stdout?.on('data',d=>{ stdout+=String(d); });
-    child.stderr?.on('data',d=>{ stderr+=String(d); });
-    child.on('error',error=>resolve({status:null,error,stdout,stderr}));
-    child.on('close',(status,signal)=>resolve({status,signal,stdout,stderr}));
-  });
-}
-async function localWhisperTranscribe(file){
-  const exe=findWhisperExe();
-  const model=findWhisperModel();
-  const wav=prepareWhisperWav(file);
-  const prefix=path.join(OUT, 'whisper-' + Date.now());
-  const threads=Math.max(1, Math.min(8, (os.cpus()?.length||4)-1));
-  const args=['-m', model, '-f', wav, '-otxt', '-of', prefix, '-l', 'auto', '-tr', '-t', String(threads)];
-  const r=await runProcessAsync(exe, args, { cwd:path.dirname(exe), env:{...process.env, PATH:path.dirname(exe)+path.delimiter+(process.env.PATH||'')} });
-  const txtFile=prefix + '.txt';
-  if(r.status!==0 || !fs.existsSync(txtFile)){
-    const detail=(r.error ? String(r.error.message||r.error)+' | ' : '') + (r.signal ? 'signal_'+r.signal+' | ' : '') + (r.stderr||r.stdout||('exit_'+r.status));
-    throw new Error('local_whisper_failed: exe=' + exe + ' model=' + model + ' wav=' + wav + ' detail=' + detail.slice(0,1200));
-  }
-  return fs.readFileSync(txtFile,'utf8').trim();
 }
 
 function promptCountFromDuration(file, seconds){
@@ -184,27 +162,6 @@ function promptCountFromDuration(file, seconds){
   const duration=mediaDurationSeconds(file);
   const cut=Math.max(1, Number(seconds||8)||8);
   return {durationSeconds:duration, cutSeconds:cut, promptCount:duration?Math.ceil(duration/cut):0};
-}
-
-function splitAudio(file, seconds){
-  ensure();
-  const dir = path.join(OUT, 'chunks_' + Date.now());
-  fs.mkdirSync(dir, { recursive:true });
-  const ext = String(file).toLowerCase().endsWith('.wav') ? 'wav' : String(file).toLowerCase().endsWith('.m4a') ? 'm4a' : 'mp3';
-  let pattern = path.join(dir, `chunk_%03d.${ext}`);
-  let r = runFfmpeg(['-y','-i',file,'-f','segment','-segment_time',String(seconds||30),'-reset_timestamps','1','-c','copy',pattern]);
-  let files = fs.readdirSync(dir).filter(x => x.startsWith('chunk_')).map(x => path.join(dir, x));
-  if (r.status !== 0 || !files.length) {
-    pattern = path.join(dir, 'chunk_%03d.mp3');
-    r = runFfmpeg(['-y','-i',file,'-f','segment','-segment_time',String(seconds||30),'-reset_timestamps','1','-vn','-ar','44100','-ac','2','-b:a','128k',pattern]);
-    files = fs.readdirSync(dir).filter(x => x.startsWith('chunk_') && x.endsWith('.mp3')).map(x => path.join(dir, x));
-  }
-  if (r.status !== 0 || !files.length) {
-    const log = path.join(OUT, 'ffmpeg-split-error-' + Date.now() + '.log');
-    fs.writeFileSync(log, `ffmpeg=${ffmpegBin()}\nstatus=${r.status}\nstdout=${r.stdout||''}\nstderr=${r.stderr||''}`, 'utf8');
-    throw new Error('ffmpeg_split_failed: ' + log);
-  }
-  return files.sort();
 }
 
 function objectToPromptText(x){
@@ -239,56 +196,59 @@ function splitLongPromptText(text, count, dialog, subtitles){
   const per=Math.max(1, Math.ceil(sentences.length/count));
   for(let i=0;i<count;i++){
     const chunk=sentences.slice(i*per,(i+1)*per).join(' ').trim() || clean;
-    parts.push(`Scene ${String(i+1).padStart(2,'0')} – Story Beat | Character 1: based on the original text | Character 2: based on the original text | Style: follow the provided style JSON | Character voices: match the original audio | Camera: cinematic shot for this beat | Setting: faithful to the original story | Mood: consistent with this moment | Audio cues: match the narration | Dialog: ${dialog?'include if present in original':'none'} | ${subtitles?'Subtitles ON':'Subtitles OFF'} | Content: ${chunk}`);
+    parts.push(`Scene ${String(i+1).padStart(2,'0')} – Story Beat | Character 1: based on the original text | Style: follow Style JSON | Camera: cinematic | Mood: consistent | Dialog: ${dialog?'yes':'none'} | Subtitles: ${subtitles?'ON':'OFF'} | Content: ${chunk}`);
   }
   return parts;
 }
 
-ipcMain.handle('audio:info', async(_e,p={})=>{ try{ if(!p.file)return {ok:false,error:'missing_file'}; return {ok:true,...promptCountFromDuration(p.file,p.chunkSeconds)}; }catch(e){ console.error('[audio:process] Error:', e); return {ok:false,error: String(e.stack || e.message || e)}; } });
+ipcMain.handle('audio:info', async(_e,p={})=>{ try{ if(!p.file)return {ok:false,error:'missing_file'}; return {ok:true,...promptCountFromDuration(p.file,p.chunkSeconds)}; }catch(e){ return {ok:false,error: String(e.message)}; } });
 
 ipcMain.handle('audio:process', async(_e,p={})=>{
   try{
-    ensure(); if(!parseKeys(p.apiKeys||p.apiKey).length) return {ok:false,error:'missing_api_key'}; 
+    ensure();
+    const bot = {
+      apiType: p.apiType || 'gemini',
+      baseUrl: p.baseUrl,
+      apiKeys: p.apiKeys || p.apiKey,
+      serviceAccountPath: p.serviceAccountPath,
+      geminiBaseUrl: p.geminiBaseUrl,
+      openaiBaseUrl: p.openaiBaseUrl,
+      model: p.model
+    };
+
     const autoCountInfo=promptCountFromDuration(p.audioFile, Number(p.chunkSeconds||8));
-    let chunks=[];
-    let splitWarning='';
-    try {
-      chunks=splitAudio(p.audioFile, Number(p.chunkSeconds||30));
-    } catch (splitErr) {
-      splitWarning=String(splitErr.message||splitErr);
-      chunks=[p.audioFile];
-    }
-        const transcripts=[];
+    let transcripts=[];
     if(p.audioFile) {
-      if(mode==='localWhisper'){
-        const t=await localWhisperTranscribe(p.audioFile);
-        transcripts.push(t);
-      }else{
-        const data=fs.readFileSync(p.audioFile).toString('base64');
-        const t=await gemini(p.apiKeys||p.apiKey, [{inlineData:{mimeType:mime(p.audioFile),data}}, {text:'Transcribe audio to English...'}], 'System...', false, 0, mode);
-        transcripts.push(t);
-      }
+      const data=fs.readFileSync(p.audioFile).toString('base64');
+      const tData = await callApiGeneric({ 
+        bot: { ...bot, apiType: 'gemini', systemInstruction: 'You are a professional transcriber.' }, 
+        prompt: `Transcribe this audio Precisely to English.` 
+      });
+      transcripts.push(tData?.candidates?.[0]?.content?.parts?.[0]?.text || "");
     } else {
       transcripts.push("[No audio provided, using original text only]");
     }
     const raw=transcripts.join('\n');
-    const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||chunks.length)||chunks.length);
-    console.log('[audio-prompt] desiredCount=', desiredCount, 'target=', p.targetPromptCount, 'auto=', autoCountInfo.promptCount, 'chunks=', chunks.length, 'duration=', autoCountInfo.durationSeconds);
-    const sys=`You are a professional video prompt engineer. Your output MUST be a JSON array containing EXACTLY ${desiredCount} scene strings. Output text (titles, descriptions, labels, etc.) MUST be in the language specified in the EXTRA PROMPT REQUIREMENTS (default to English if not specified). Create exactly ${desiredCount} prompts/scenes. Each scene must strictly follow this exact format: Scene 01 – Short Title | Character 1: ... | Character 2: ... | Style: ... | Character voices: ... | Camera: ... | Setting: ... | Mood: ... | Audio cues: ... | Dialog: ... | Subtitles OFF/ON. Use these exact labels but translate them if a non-English language is requested. Preserve the SAME storyline, structure, and emotional intent from the original text. Do not invent a different story. Respect the user Style JSON. Dialog enabled: ${p.dialog?'yes':'no'}. Subtitles enabled: ${p.subtitles?'yes':'no'}. Apply extra prompt requirements if provided, but never override the original content. Compare the translated audio transcript with the original text if provided. The audio may be in a different language from the original text. Use BOTH sources: preserve the audio timing/order and preserve the original text meaning. If they differ, keep the core meaning of the original text but respect important details heard in the audio. Then generate final English prompts faithful to both sources.`;
-    const prompt=`STYLE JSON:\n${p.styleJson||''}\n\nORIGINAL TEXT:\n${p.originalText||''}\n\nEXTRA PROMPT REQUIREMENTS:\n${p.extraRequirement||''}\n\nAUDIO TRANSCRIPT TRANSLATED TO ENGLISH:\n${raw}\n\nGenerate final prompts in ENGLISH only. Output must be a JSON array of strings only, not objects. Each string must match this format exactly: Scene 01 – Short Title | Character 1: ... | Character 2: [None] | Style: ... | Character voices: [None] | Camera: ... | Setting: ... | Mood: ... | Audio cues: ... | Dialog: [None] | Subtitles OFF. Preserve the same system, storyline, scene order, meaning, characters, and emotional intent as the original text. Do not rewrite into a different concept.`;
-    const out=await gemini(p.apiKeys||p.apiKey, [{text:prompt}], sys, true, chunks.length, mode);
+    const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||1));
+    
+    const sys=`You are a professional video prompt engineer. Your output MUST be a JSON array containing EXACTLY ${desiredCount} scene strings.`;
+    const promptReq = `STYLE JSON:\n${p.styleJson||''}\n\nORIGINAL TEXT:\n${p.originalText||''}\n\nEXTRA REQUIREMENTS:\n${p.extraRequirement||''}\n\nAUDIO TRANSCRIPT:\n${raw}\n\nGenerate exactly ${desiredCount} prompts in ENGLISH. Format: Scene 01 – Title | Character 1: ... | Style: ... | Camera: ... | Mood: ... | Dialog: ${p.dialog?'Enabled':'None'} | Subtitles: ${p.subtitles?'ON':'OFF'}. Return ONLY a JSON array of strings.`;
+
+    const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
+    const out = outData?.choices?.[0]?.message?.content || outData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
     let parsed; try { parsed=JSON.parse(out.replace(/^```json\s*|```$/g,'')); } catch { parsed=out; }
     let arr=normalizePromptArray(parsed).filter(Boolean);
+    
     if(arr.length===1 && desiredCount>1) arr=splitLongPromptText(arr[0], desiredCount, p.dialog, p.subtitles);
     if(arr.length>desiredCount) arr=arr.slice(0,desiredCount);
     while(arr.length<desiredCount){
-      const source=raw || p.originalText || 'the original story';
-      arr.push(...splitLongPromptText(source, desiredCount-arr.length, p.dialog, p.subtitles));
+      arr.push(...splitLongPromptText(raw || p.originalText || 'the story', desiredCount-arr.length, p.dialog, p.subtitles));
       if(arr.length>desiredCount) arr=arr.slice(0,desiredCount);
     }
-    const resultFile=path.join(OUT,'audio-prompts-'+Date.now()+'.json'); arr=arr.map(cleanPromptText);
+
+    const resultFile=path.join(OUT,'audio-prompts-'+Date.now()+'.json');
     fs.writeFileSync(resultFile, JSON.stringify(arr,null,2), 'utf8');
-    const transcriptFile=path.join(OUT,'transcript-'+Date.now()+'.txt'); fs.writeFileSync(transcriptFile, raw, 'utf8');
-    return {ok:true,count:Array.isArray(arr)?arr.length:1,prompts:arr,resultFile,transcriptFile,splitWarning,durationSeconds:autoCountInfo.durationSeconds,cutSeconds:autoCountInfo.cutSeconds,autoPromptCount:autoCountInfo.promptCount};
-  }catch(e){ console.error('[audio:process] Error:', e); return {ok:false,error: String(e.stack || e.message || e)}; }
+    return {ok:true, prompts:arr, resultFile, transcript: raw};
+  }catch(e){ return {ok:false,error: String(e.message)}; }
 });
