@@ -145,7 +145,6 @@ function ffmpegBin(){
 function runFfmpeg(args){ return spawnSync(ffmpegBin(), args, { encoding:'utf8', windowsHide:true }); }
 function mime(f){ const e=String(f).toLowerCase().split('.').pop(); if(e==='wav')return 'audio/wav'; if(e==='m4a')return 'audio/mp4'; return 'audio/mpeg'; }
 function parseKeys(input){ return String(input||'').split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean); }
-function waitMs(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
 function mediaDurationSeconds(file){
   try{
