@@ -25,6 +25,7 @@ function onlyDigits(value: string) {
 
 function App() {
   const [apiKey, setApiKey] = useState('');
+  const [gatewayUrl, setGatewayUrl] = useState('https://fisher-fare-wiley-travelling.trycloudflare.com');
   const [serviceAccountPath, setServiceAccountPath] = useState('');
   const [styleJson, setStyleJson] = useState('');
   const [audioFile, setAudioFile] = useState('');
@@ -43,6 +44,7 @@ function App() {
   useEffect(() => {
     api().loadConfig().then((c: any) => {
       setApiKey(c.apiKeys || c.apiKey || '');
+      setGatewayUrl(c.gatewayUrl || 'https://fisher-fare-wiley-travelling.trycloudflare.com');
       setServiceAccountPath(c.serviceAccountPath || '');
       setStyleJson(c.styleJson || '');
       setTranscriptionMode(c.transcriptionMode || 'localWhisper');
@@ -92,7 +94,7 @@ function App() {
   }
 
   async function save() {
-    await api().saveConfig({ apiKeys: apiKey, serviceAccountPath, styleJson, transcriptionMode });
+    await api().saveConfig({ apiKeys: apiKey, gatewayUrl, serviceAccountPath, styleJson, transcriptionMode });
     setStatus('Đã lưu cấu hình');
   }
 
@@ -140,6 +142,7 @@ function App() {
 
     const r = await api().process({
       apiKeys: apiKey,
+      baseUrl: gatewayUrl,
       serviceAccountPath,
       styleJson,
       audioFile,
@@ -186,21 +189,26 @@ function App() {
           </Field>
 
           {transcriptionMode === 'gateway' && (
-            <Field label="Gateway Keys">
-              <textarea className="smallarea" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Nhập API Keys..." />
-            </Field>
+            <>
+              <Field label="Gateway URL">
+                <input type="text" value={gatewayUrl} onChange={e => setGatewayUrl(e.target.value)} placeholder="https://..." />
+              </Field>
+              <Field label="Gateway Keys">
+                <textarea className="smallarea password-mask" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Nhập API Keys..." />
+              </Field>
+            </>
           )}
 
           {transcriptionMode === 'gemini' && (
             <Field label="Gemini Keys">
-              <textarea className="smallarea" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Nhập Gemini Keys..." />
+              <textarea className="smallarea password-mask" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Nhập Gemini Keys..." />
             </Field>
           )}
 
           {transcriptionMode === 'vertex' && (
-            <Field label="Vertex JSON">
+            <Field label="Service Account JSON">
               <div className="file-input-group">
-                <input type="text" readOnly value={serviceAccountPath} placeholder="Chọn file Service Account JSON..." />
+                <input type="text" className="password-mask" readOnly value={serviceAccountPath} placeholder="Chọn file Service Account JSON..." />
                 <button className="action-btn" onClick={pickServiceAccount}>Chọn</button>
               </div>
             </Field>
@@ -208,7 +216,7 @@ function App() {
 
           {transcriptionMode === 'openai' && (
             <Field label="OpenAI Keys">
-              <textarea className="smallarea" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Nhập OpenAI Keys..." />
+              <textarea className="smallarea password-mask" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Nhập OpenAI Keys..." />
             </Field>
           )}
           
