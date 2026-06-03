@@ -25,6 +25,7 @@ function onlyDigits(value: string) {
 
 function App() {
   const [apiKey, setApiKey] = useState('');
+  const [serviceAccountPath, setServiceAccountPath] = useState('');
   const [styleJson, setStyleJson] = useState('');
   const [audioFile, setAudioFile] = useState('');
   const [transcriptionMode, setTranscriptionMode] = useState('localWhisper');
@@ -42,6 +43,7 @@ function App() {
   useEffect(() => {
     api().loadConfig().then((c: any) => {
       setApiKey(c.apiKeys || c.apiKey || '');
+      setServiceAccountPath(c.serviceAccountPath || '');
       setStyleJson(c.styleJson || '');
       setTranscriptionMode(c.transcriptionMode || 'localWhisper');
     });
@@ -81,8 +83,16 @@ function App() {
   }
 
 
+  async function pickServiceAccount() {
+    const r = await api().openFile({
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (r?.[0]) setServiceAccountPath(r[0]);
+  }
+
   async function save() {
-    await api().saveConfig({ apiKeys: apiKey, styleJson, transcriptionMode });
+    await api().saveConfig({ apiKeys: apiKey, serviceAccountPath, styleJson, transcriptionMode });
     setStatus('Đã lưu cấu hình');
   }
 
@@ -130,6 +140,7 @@ function App() {
 
     const r = await api().process({
       apiKeys: apiKey,
+      serviceAccountPath,
       styleJson,
       audioFile,
       transcriptionMode,
@@ -183,6 +194,15 @@ function App() {
           {transcriptionMode === 'gemini' && (
             <Field label="Gemini Keys">
               <textarea className="smallarea" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Nhập Gemini Keys..." />
+            </Field>
+          )}
+
+          {transcriptionMode === 'vertex' && (
+            <Field label="Vertex JSON">
+              <div className="file-input-group">
+                <input type="text" readOnly value={serviceAccountPath} placeholder="Chọn file Service Account JSON..." />
+                <button className="action-btn" onClick={pickServiceAccount}>Chọn</button>
+              </div>
             </Field>
           )}
 
