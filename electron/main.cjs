@@ -230,8 +230,8 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||1));
     
-    const sys=`You are a professional video prompt engineer. Your output MUST be a JSON array containing EXACTLY ${desiredCount} scene strings.`;
-    const promptReq = `STYLE JSON:\n${p.styleJson||''}\n\nORIGINAL TEXT:\n${p.originalText||''}\n\nEXTRA REQUIREMENTS:\n${p.extraRequirement||''}\n\nAUDIO TRANSCRIPT:\n${raw}\n\nGenerate exactly ${desiredCount} prompts in ENGLISH. Format: Scene 01 – Title | Character 1: ... | Style: ... | Camera: ... | Mood: ... | Dialog: ${p.dialog?'Enabled':'None'} | Subtitles: ${p.subtitles?'ON':'OFF'}. Return ONLY a JSON array of strings.`;
+    const sys=`You are a professional video prompt engineer. Your output MUST be in ENGLISH and MUST be a JSON array containing EXACTLY ${desiredCount} scene strings.`;
+    const promptReq = `STYLE JSON:\n${p.styleJson||''}\n\nORIGINAL TEXT:\n${p.originalText||''}\n\nEXTRA REQUIREMENTS:\n${p.extraRequirement||''}\n\nAUDIO TRANSCRIPT:\n${raw}\n\nGenerate exactly ${desiredCount} prompts strictly in ENGLISH language. Format: Scene 01 – Title | Character 1: ... | Style: ... | Camera: ... | Mood: ... | Dialog: ${p.dialog?'Enabled':'None'} | Subtitles: ${p.subtitles?'ON':'OFF'}. Return ONLY a JSON array of strings.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
     const out = outData?.choices?.[0]?.message?.content || outData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
