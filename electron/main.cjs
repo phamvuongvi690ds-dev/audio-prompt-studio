@@ -52,18 +52,27 @@ async function callApiGeneric({ bot, prompt }) {
           const base = (geminiBaseUrl || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
           url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
           headers = { 'Content-Type': 'application/json' };
-          body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: (systemInstruction || '') + "\n\n" + prompt }] }] });
+          body = JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            system_instruction: { parts: [{ text: systemInstruction || '' }] }
+          });
         } else if (apiType === 'gateway') {
           const base = (baseUrl || 'https://fisher-fare-wiley-travelling.trycloudflare.com').replace(/\/$/, '');
           url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
           headers = { 'Content-Type': 'application/json' };
-          body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: (systemInstruction || '') + "\n\n" + prompt }] }] });
+          body = JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            system_instruction: { parts: [{ text: systemInstruction || '' }] }
+          });
         } else if (apiType === 'vertex') {
           const token = await getVertexToken(serviceAccountPath);
           const keyData = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
           url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${keyData.project_id}/locations/us-central1/publishers/google/models/${model}:generateContent`;
           headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-          body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: (systemInstruction || '') + "\n\n" + prompt }] }] });
+          body = JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            system_instruction: { parts: [{ text: systemInstruction || '' }] }
+          });
         } else if (apiType === 'openai') {
           url = `${(openaiBaseUrl || 'https://api.openai.com').replace(/\/$/, '')}/v1/chat/completions`;
           headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
