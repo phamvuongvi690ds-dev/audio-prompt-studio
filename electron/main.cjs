@@ -227,20 +227,39 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     const autoCountInfo=promptCountFromDuration(p.audioFile, Number(p.chunkSeconds||8));
     let transcripts=[];
     if(p.audioFile) {
-      const data=fs.readFileSync(p.audioFile).toString('base64');
       const tData = await callApiGeneric({ 
-        bot: { ...bot, apiType: 'gemini', systemInstruction: 'You are a professional transcriber.' }, 
-        prompt: `Transcribe this audio Precisely to English.` 
+        bot: { ...bot, systemInstruction: 'You are a professional transcriber. You MUST translate the audio content to ENGLISH.' }, 
+        prompt: `Transcribe and translate this audio content precisely to ENGLISH language.` 
       });
-      transcripts.push(tData?.candidates?.[0]?.content?.parts?.[0]?.text || "");
+      transcripts.push(tData?.candidates?.[0]?.content?.parts?.[0]?.text || data?.choices?.[0]?.message?.content || "");
     } else {
       transcripts.push("[No audio provided, using original text only]");
     }
     const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||1));
     
-    const sys=`You are a professional video prompt engineer. Your output MUST be in ENGLISH and MUST be a JSON array containing EXACTLY ${desiredCount} scene strings.`;
-    const promptReq = `STYLE JSON:\n${p.styleJson||''}\n\nORIGINAL TEXT:\n${p.originalText||''}\n\nEXTRA REQUIREMENTS:\n${p.extraRequirement||''}\n\nAUDIO TRANSCRIPT:\n${raw}\n\nGenerate exactly ${desiredCount} prompts strictly in ENGLISH language. Format: Scene 01 – Title | Character 1: ... | Style: ... | Camera: ... | Mood: ... | Dialog: ${p.dialog?'Enabled':'None'} | Subtitles: ${p.subtitles?'ON':'OFF'}. Return ONLY a JSON array of strings.`;
+    const sys=`You are a professional video prompt engineer. 
+CRITICAL INSTRUCTION: Your output MUST be in ENGLISH. 
+Even if the input text is in Japanese, Vietnamese, or any other language, you MUST TRANSLATE it and generate the prompts strictly in ENGLISH.
+Your output MUST be a JSON array containing EXACTLY ${desiredCount} scene strings.`;
+
+    const promptReq = `STRICT REQUIREMENT: GENERATE EVERYTHING IN ENGLISH.
+
+STYLE JSON:
+${p.styleJson||''}
+
+ORIGINAL TEXT (TRANSLATE THIS TO ENGLISH FOR THE PROMPTS):
+${p.originalText||''}
+
+EXTRA REQUIREMENTS:
+${p.extraRequirement||''}
+
+AUDIO TRANSCRIPT:
+${raw}
+
+TASK: Generate exactly ${desiredCount} video prompts strictly in ENGLISH language. 
+Format for each string: Scene 01 – Title | Character 1: ... | Style: ... | Camera: ... | Mood: ... | Dialog: ${p.dialog?'Enabled':'None'} | Subtitles: ${p.subtitles?'ON':'OFF'}. 
+Return ONLY a JSON array of strings. NO Japanese, NO other languages.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
     const out = outData?.choices?.[0]?.message?.content || outData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
