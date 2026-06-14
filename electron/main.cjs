@@ -241,25 +241,28 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||1));
     
-    const sys=`You are a professional AI video prompt engineer. 
-Your SOLE PURPOSE is to output video prompts in ENGLISH.
-CRITICAL RULE: NEVER use Japanese, Vietnamese, or any language other than ENGLISH in your response. 
-If the user provides text in another language, you MUST TRANSLATE it to English first. 
-Output MUST be a valid JSON array of strings.`;
+    const sys=`You are a strict translation and video prompt expert.
+PRIMARY RULE: EVERY SINGLE WORD of your response MUST BE IN ENGLISH.
+YOUR OUTPUT LANGUAGE IS ENGLISH ONLY.
+DO NOT use Japanese characters. DO NOT use Vietnamese characters.
+If the input is Japanese, you MUST TRANSLATE it into English before creating the prompts.
 
-    const promptReq = `I will provide you with a text. You MUST translate it to English and generate ${desiredCount} detailed video prompts in English.
-    
-TEXT TO TRANSLATE AND PROCESS:
+Output MUST be a JSON array of exactly ${desiredCount} strings.
+Format: Scene XX | Camera: [English description] | Content: [English description]`;
+
+    const promptReq = `INPUT TEXT (MANDATORY ENGLISH TRANSLATION):
 "${p.originalText || raw}"
 
-GUIDELINES:
-1. Identify the core meaning of the text.
-2. Translate all concepts to English.
-3. Write ${desiredCount} specific video prompts in English.
-4. Format each string: "Scene XX | Camera: ... | Content: [English description]"
-5. Return ONLY the JSON array. NO filler text. NO Japanese characters.
+STYLE JSON:
+${p.styleJson||'{}'}
 
-STRICT MANDATE: THE ENTIRE RESPONSE MUST BE IN ENGLISH.`;
+TASK:
+1. Translate the entire input text into English.
+2. Based on the English translation, generate exactly ${desiredCount} video prompts.
+3. Every prompt string MUST BE 100% ENGLISH.
+4. Return ONLY the JSON array.
+
+STRICT BAN: NO JAPANESE TEXT. NO CHINESE TEXT. NO KOREAN TEXT. ONLY ENGLISH.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
     const out = outData?.choices?.[0]?.message?.content || outData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
