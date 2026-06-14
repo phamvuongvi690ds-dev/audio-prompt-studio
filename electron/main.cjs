@@ -54,7 +54,7 @@ async function callApiGeneric({ bot, prompt }) {
           headers = { 'Content-Type': 'application/json' };
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            system_instruction: { parts: [{ text: systemInstruction || '' }] },
+            systemInstruction: { parts: [{ text: systemInstruction || '' }] },
             generationConfig: { temperature: 0.1, topP: 0.1, topK: 1 }
           });
         } else if (apiType === 'gateway') {
@@ -63,7 +63,7 @@ async function callApiGeneric({ bot, prompt }) {
           headers = { 'Content-Type': 'application/json' };
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            system_instruction: { parts: [{ text: systemInstruction || '' }] },
+            systemInstruction: { parts: [{ text: systemInstruction || '' }] },
             generationConfig: { temperature: 0.1, topP: 0.1, topK: 1 }
           });
         } else if (apiType === 'vertex') {
@@ -73,7 +73,7 @@ async function callApiGeneric({ bot, prompt }) {
           headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            system_instruction: { parts: [{ text: systemInstruction || '' }] },
+            systemInstruction: { parts: [{ text: systemInstruction || '' }] },
             generationConfig: { temperature: 0.1, topP: 0.1, topK: 1 }
           });
         } else if (apiType === 'openai') {
