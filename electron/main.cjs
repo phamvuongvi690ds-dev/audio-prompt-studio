@@ -54,7 +54,7 @@ async function callApiGeneric({ bot, prompt }) {
           headers = { 'Content-Type': 'application/json' };
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: systemInstruction || '' }] },
+            system_instruction: { parts: [{ text: systemInstruction || '' }] },
             generationConfig: { temperature: 0.1, topP: 0.1, topK: 1 }
           });
         } else if (apiType === 'gateway') {
@@ -63,7 +63,7 @@ async function callApiGeneric({ bot, prompt }) {
           headers = { 'Content-Type': 'application/json' };
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: systemInstruction || '' }] },
+            system_instruction: { parts: [{ text: systemInstruction || '' }] },
             generationConfig: { temperature: 0.1, topP: 0.1, topK: 1 }
           });
         } else if (apiType === 'vertex') {
@@ -73,7 +73,7 @@ async function callApiGeneric({ bot, prompt }) {
           headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: systemInstruction || '' }] },
+            system_instruction: { parts: [{ text: systemInstruction || '' }] },
             generationConfig: { temperature: 0.1, topP: 0.1, topK: 1 }
           });
         } else if (apiType === 'openai') {
@@ -266,7 +266,6 @@ OUTPUT SPECIFICATION:
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
     
-    // NẾU API LỖI THÌ PHẢI BÁO LỖI NGAY, KHÔNG ĐƯỢC FALLBACK RA VĂN BẢN GỐC
     if (outData.error) {
       throw new Error(`API Error (${bot.apiType}): ` + (outData.error.message || JSON.stringify(outData.error)));
     }
@@ -277,12 +276,8 @@ OUTPUT SPECIFICATION:
     let parsed; try { parsed=JSON.parse(out.replace(/^```json\s*|```$/g,'')); } catch { parsed=out; }
     let arr=normalizePromptArray(parsed).filter(Boolean);
     
-    // Nếu AI trả về text thường thay vì JSON, ta mới xử lý cắt nhỏ
     if(arr.length===1 && desiredCount>1) arr=splitLongPromptText(arr[0], desiredCount, p.dialog, p.subtitles);
-    
     if(arr.length>desiredCount) arr=arr.slice(0,desiredCount);
-    
-    // Không dùng fallback lấy văn bản gốc nữa để tránh ra tiếng Nhật
     if (arr.length === 0) throw new Error("Failed to generate any prompts.");
 
     const resultFile=path.join(OUT,'audio-prompts-'+Date.now()+'.json');
