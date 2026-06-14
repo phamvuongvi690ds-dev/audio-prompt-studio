@@ -39,7 +39,7 @@ async function getVertexToken(keyPath) {
 async function callApiGeneric({ bot, prompt }) {
   const { apiType, baseUrl, apiKeys, keyIndex, serviceAccountPath, geminiBaseUrl, openaiBaseUrl, systemInstruction } = bot;
   const keys = Array.isArray(apiKeys) && apiKeys.length ? apiKeys : (typeof apiKeys === 'string' ? apiKeys.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean) : ['']);
-  const models = fallbackModels(apiType, bot.model || (apiType === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash'));
+  const models = fallbackModels(apiType, bot.model || (apiType === 'openai' ? 'gpt-4o-mini' : 'gemini-2.0-flash'));
   let lastData = null;
 
   for (const model of models) {
@@ -86,17 +86,6 @@ async function callApiGeneric({ bot, prompt }) {
               { role: 'user', content: prompt }
             ],
             temperature: 0.1
-          });
-        }
-          url = `${(openaiBaseUrl || 'https://api.openai.com').replace(/\/$/, '')}/v1/chat/completions`;
-          headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
-          body = JSON.stringify({
-            model,
-            messages: [
-              { role: 'system', content: systemInstruction || '' },
-              { role: 'user', content: prompt }
-            ],
-            temperature: 0.8
           });
         }
 
