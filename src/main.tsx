@@ -25,6 +25,7 @@ function onlyDigits(value: string) {
 
 function App() {
   const [apiKey, setApiKey] = useState('');
+  const [botModel, setBotModel] = useState('gemini-1.5-flash');
   const [gatewayUrl, setGatewayUrl] = useState('https://fisher-fare-wiley-travelling.trycloudflare.com');
   const [serviceAccountPath, setServiceAccountPath] = useState('');
   const [styleJson, setStyleJson] = useState('');
@@ -44,6 +45,7 @@ function App() {
   useEffect(() => {
     api().loadConfig().then((c: any) => {
       setApiKey(c.apiKeys || c.apiKey || '');
+      setBotModel(c.botModel || 'gemini-1.5-flash');
       setGatewayUrl(c.gatewayUrl || 'https://fisher-fare-wiley-travelling.trycloudflare.com');
       setServiceAccountPath(c.serviceAccountPath || '');
       setStyleJson(c.styleJson || '');
@@ -94,7 +96,7 @@ function App() {
   }
 
   async function save() {
-    await api().saveConfig({ apiKeys: apiKey, gatewayUrl, serviceAccountPath, styleJson, transcriptionMode });
+    await api().saveConfig({ apiKeys: apiKey, botModel, gatewayUrl, serviceAccountPath, styleJson, transcriptionMode });
     setStatus('Đã lưu cấu hình');
   }
 
@@ -153,6 +155,7 @@ function App() {
       extraRequirement,
       dialog,
       subtitles,
+      model: botModel
     });
     
     if (r?.prompts) {
@@ -206,12 +209,21 @@ function App() {
           )}
 
           {transcriptionMode === 'vertex' && (
-            <Field label="Service Account JSON">
-              <div className="file-input-group">
-                <input type="text" className="password-mask" readOnly value={serviceAccountPath} placeholder="Chọn file Service Account JSON..." />
-                <button className="action-btn" onClick={pickServiceAccount}>Chọn</button>
-              </div>
-            </Field>
+            <>
+              <Field label="Model">
+                <select value={botModel} onChange={e => setBotModel(e.target.value)}>
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                  <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                </select>
+              </Field>
+              <Field label="Service Account JSON">
+                <div className="file-input-group">
+                  <input type="text" className="password-mask" readOnly value={serviceAccountPath} placeholder="Chọn file Service Account JSON..." />
+                  <button className="action-btn" onClick={pickServiceAccount}>Chọn</button>
+                </div>
+              </Field>
+            </>
           )}
 
           {transcriptionMode === 'openai' && (

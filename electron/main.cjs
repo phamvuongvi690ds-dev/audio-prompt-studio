@@ -22,7 +22,7 @@ function isRetryableError(data) {
 function fallbackModels(apiType, model) {
   const list = apiType === 'openai'
     ? ['gpt-4o-mini', 'gpt-4o']
-    : ['gemini-2.0-flash', 'gemini-1.5-flash'];
+    : ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
   return [model, ...list.filter(m => m !== model)];
 }
 
