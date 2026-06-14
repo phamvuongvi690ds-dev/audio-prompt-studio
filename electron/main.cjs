@@ -241,28 +241,27 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||1));
     
-    const sys=`You are a strict translation and video prompt expert.
-PRIMARY RULE: EVERY SINGLE WORD of your response MUST BE IN ENGLISH.
-YOUR OUTPUT LANGUAGE IS ENGLISH ONLY.
-DO NOT use Japanese characters. DO NOT use Vietnamese characters.
-If the input is Japanese, you MUST TRANSLATE it into English before creating the prompts.
+    const sys=`You are a professional AI translator and video prompt engineer.
+CRITICAL MANDATE: YOUR ENTIRE OUTPUT MUST BE IN ENGLISH.
+If you see Japanese text, Chinese characters (Kanji/Hanzi), or any non-English script, you MUST TRANSLATE it to English immediately.
+The final result must be a JSON array where every string is 100% English.
+DO NOT mirror the user's input language. OUTPUT = ENGLISH ONLY.`;
 
-Output MUST be a JSON array of exactly ${desiredCount} strings.
-Format: Scene XX | Camera: [English description] | Content: [English description]`;
+    const promptReq = `[STRICT ENGLISH ONLY MODE]
+Convert this text into ${desiredCount} English video prompts. 
+If the text below is in Japanese, translation to English is YOUR FIRST STEP.
 
-    const promptReq = `INPUT TEXT (MANDATORY ENGLISH TRANSLATION):
+TEXT TO PROCESS:
 "${p.originalText || raw}"
 
-STYLE JSON:
+STYLE CONTEXT:
 ${p.styleJson||'{}'}
 
-TASK:
-1. Translate the entire input text into English.
-2. Based on the English translation, generate exactly ${desiredCount} video prompts.
-3. Every prompt string MUST BE 100% ENGLISH.
-4. Return ONLY the JSON array.
-
-STRICT BAN: NO JAPANESE TEXT. NO CHINESE TEXT. NO KOREAN TEXT. ONLY ENGLISH.`;
+OUTPUT SPECIFICATION:
+- Number of prompts: ${desiredCount}
+- Language: 100% English (Forbidden: Japanese characters)
+- Format: "Scene XX | Camera: ... | Content: [English translation and scene description]"
+- Return Type: JSON array of strings only.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
     const out = outData?.choices?.[0]?.message?.content || outData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
