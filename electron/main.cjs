@@ -234,7 +234,8 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
         bot: { ...bot, systemInstruction: 'You are a professional transcriber. You MUST translate the audio content to ENGLISH.' }, 
         prompt: `Transcribe and translate this audio content precisely to ENGLISH language.` 
       });
-      transcripts.push(tData?.candidates?.[0]?.content?.parts?.[0]?.text || tData?.choices?.[0]?.message?.content || "");
+      if (tData.error) throw new Error("Transcription API Error: " + (tData.error.message || JSON.stringify(tData.error)));
+      transcripts.push(tData?.choices?.[0]?.message?.content || tData?.candidates?.[0]?.content?.parts?.[0]?.text || "");
     } else {
       transcripts.push("[No audio provided, using original text only]");
     }
@@ -264,20 +265,31 @@ OUTPUT SPECIFICATION:
 - Return Type: JSON array of strings only.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
+    
+    // NẾU API LỖI THÌ PHẢI BÁO LỖI NGAY, KHÔNG ĐƯỢC FALLBACK RA VĂN BẢN GỐC
+    if (outData.error) {
+      throw new Error(`API Error (${bot.apiType}): ` + (outData.error.message || JSON.stringify(outData.error)));
+    }
+
     const out = outData?.choices?.[0]?.message?.content || outData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    if (!out) throw new Error("API returned empty content.");
 
     let parsed; try { parsed=JSON.parse(out.replace(/^```json\s*|```$/g,'')); } catch { parsed=out; }
     let arr=normalizePromptArray(parsed).filter(Boolean);
     
+    // Nếu AI trả về text thường thay vì JSON, ta mới xử lý cắt nhỏ
     if(arr.length===1 && desiredCount>1) arr=splitLongPromptText(arr[0], desiredCount, p.dialog, p.subtitles);
+    
     if(arr.length>desiredCount) arr=arr.slice(0,desiredCount);
-    while(arr.length<desiredCount){
-      arr.push(...splitLongPromptText(raw || p.originalText || 'the story', desiredCount-arr.length, p.dialog, p.subtitles));
-      if(arr.length>desiredCount) arr=arr.slice(0,desiredCount);
-    }
+    
+    // Không dùng fallback lấy văn bản gốc nữa để tránh ra tiếng Nhật
+    if (arr.length === 0) throw new Error("Failed to generate any prompts.");
 
     const resultFile=path.join(OUT,'audio-prompts-'+Date.now()+'.json');
     fs.writeFileSync(resultFile, JSON.stringify(arr,null,2), 'utf8');
     return {ok:true, prompts:arr, resultFile, transcript: raw};
-  }catch(e){ return {ok:false,error: String(e.message)}; }
+  }catch(e){ 
+    console.error("[audio:process] Error:", e);
+    return {ok:false,error: String(e.message)}; 
+  }
 });
