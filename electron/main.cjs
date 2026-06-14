@@ -39,7 +39,7 @@ async function getVertexToken(keyPath) {
 async function callApiGeneric({ bot, prompt }) {
   const { apiType, baseUrl, apiKeys, keyIndex, serviceAccountPath, geminiBaseUrl, openaiBaseUrl, systemInstruction } = bot;
   const keys = Array.isArray(apiKeys) && apiKeys.length ? apiKeys : (typeof apiKeys === 'string' ? apiKeys.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean) : ['']);
-  const models = fallbackModels(apiType, bot.model || (apiType === 'openai' ? 'gpt-4o-mini' : 'gemini-2.0-flash'));
+  const models = fallbackModels(apiType, bot.model || (apiType === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash'));
   let lastData = null;
 
   for (const model of models) {
@@ -55,7 +55,7 @@ async function callApiGeneric({ bot, prompt }) {
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             system_instruction: { parts: [{ text: systemInstruction || '' }] },
-            generationConfig: { temperature: 0.7 }
+            generationConfig: { temperature: 0.1, topP: 0.1, topK: 1 }
           });
         } else if (apiType === 'gateway') {
           const base = (baseUrl || 'https://fisher-fare-wiley-travelling.trycloudflare.com').replace(/\/$/, '');
@@ -64,7 +64,7 @@ async function callApiGeneric({ bot, prompt }) {
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             system_instruction: { parts: [{ text: systemInstruction || '' }] },
-            generationConfig: { temperature: 0.7 }
+            generationConfig: { temperature: 0.1, topP: 0.1, topK: 1 }
           });
         } else if (apiType === 'vertex') {
           const token = await getVertexToken(serviceAccountPath);
@@ -74,9 +74,20 @@ async function callApiGeneric({ bot, prompt }) {
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             system_instruction: { parts: [{ text: systemInstruction || '' }] },
-            generationConfig: { temperature: 0.7 }
+            generationConfig: { temperature: 0.1, topP: 0.1, topK: 1 }
           });
         } else if (apiType === 'openai') {
+          url = `${(openaiBaseUrl || 'https://api.openai.com').replace(/\/$/, '')}/v1/chat/completions`;
+          headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+          body = JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemInstruction || '' },
+              { role: 'user', content: prompt }
+            ],
+            temperature: 0.1
+          });
+        }
           url = `${(openaiBaseUrl || 'https://api.openai.com').replace(/\/$/, '')}/v1/chat/completions`;
           headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
           body = JSON.stringify({
@@ -241,26 +252,25 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||1));
     
-    const sys=`You are a professional AI video prompt engineer.
-CRITICAL MANDATE: Your output MUST be in ENGLISH.
-Your task is to translate any input (Japanese, Vietnamese, etc.) into English first, then generate detailed video prompts.
-The final output MUST be a JSON array of exactly ${desiredCount} strings.
-DO NOT use Japanese or any other language in the output. ONLY ENGLISH.`;
+    const sys=`You are a professional AI video prompt engineer. 
+Your SOLE PURPOSE is to output video prompts in ENGLISH.
+CRITICAL RULE: NEVER use Japanese, Vietnamese, or any language other than ENGLISH in your response. 
+If the user provides text in another language, you MUST TRANSLATE it to English first. 
+Output MUST be a valid JSON array of strings.`;
 
-    const promptReq = `USER INPUT (MUST BE TRANSLATED TO ENGLISH):
+    const promptReq = `I will provide you with a text. You MUST translate it to English and generate ${desiredCount} detailed video prompts in English.
+    
+TEXT TO TRANSLATE AND PROCESS:
 "${p.originalText || raw}"
 
-STYLE ANALYSIS JSON:
-${p.styleJson||'{}'}
+GUIDELINES:
+1. Identify the core meaning of the text.
+2. Translate all concepts to English.
+3. Write ${desiredCount} specific video prompts in English.
+4. Format each string: "Scene XX | Camera: ... | Content: [English description]"
+5. Return ONLY the JSON array. NO filler text. NO Japanese characters.
 
-INSTRUCTIONS:
-1. Translate the input text to English.
-2. Break the content into ${desiredCount} logical scenes.
-3. For each scene, create a descriptive video prompt in English.
-4. Format: Scene XX | Camera: ... | Mood: ... | Content: [English translation and description]
-5. Return ONLY a JSON array containing these ${desiredCount} strings.
-
-STRICT RULE: NO JAPANESE TEXT ALLOWED.`;
+STRICT MANDATE: THE ENTIRE RESPONSE MUST BE IN ENGLISH.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
     const out = outData?.choices?.[0]?.message?.content || outData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
