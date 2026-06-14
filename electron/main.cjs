@@ -52,16 +52,18 @@ async function callApiGeneric({ bot, prompt }) {
           const base = (geminiBaseUrl || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
           url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
           headers = { 'Content-Type': 'application/json' };
+          const fullPrompt = `SYSTEM INSTRUCTION: ${systemInstruction || ''}\n\nUSER PROMPT: ${prompt}\n\nFINAL REMINDER: OUTPUT MUST BE IN ENGLISH ONLY.`;
           body = JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
             system_instruction: { parts: [{ text: systemInstruction || '' }] }
           });
         } else if (apiType === 'gateway') {
           const base = (baseUrl || 'https://fisher-fare-wiley-travelling.trycloudflare.com').replace(/\/$/, '');
           url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
           headers = { 'Content-Type': 'application/json' };
+          const fullPrompt = `SYSTEM INSTRUCTION: ${systemInstruction || ''}\n\nUSER PROMPT: ${prompt}\n\nFINAL REMINDER: OUTPUT MUST BE IN ENGLISH ONLY.`;
           body = JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
             system_instruction: { parts: [{ text: systemInstruction || '' }] }
           });
         } else if (apiType === 'vertex') {
@@ -69,8 +71,9 @@ async function callApiGeneric({ bot, prompt }) {
           const keyData = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
           url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${keyData.project_id}/locations/us-central1/publishers/google/models/${model}:generateContent`;
           headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+          const fullPrompt = `SYSTEM INSTRUCTION: ${systemInstruction || ''}\n\nUSER PROMPT: ${prompt}\n\nFINAL REMINDER: OUTPUT MUST BE IN ENGLISH ONLY.`;
           body = JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
             system_instruction: { parts: [{ text: systemInstruction || '' }] }
           });
         } else if (apiType === 'openai') {
