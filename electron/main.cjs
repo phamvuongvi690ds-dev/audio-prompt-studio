@@ -231,7 +231,7 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
         bot: { ...bot, systemInstruction: 'You are a professional transcriber. You MUST translate the audio content to ENGLISH.' }, 
         prompt: `Transcribe and translate this audio content precisely to ENGLISH language.` 
       });
-      transcripts.push(tData?.candidates?.[0]?.content?.parts?.[0]?.text || data?.choices?.[0]?.message?.content || "");
+      transcripts.push(tData?.candidates?.[0]?.content?.parts?.[0]?.text || tData?.choices?.[0]?.message?.content || "");
     } else {
       transcripts.push("[No audio provided, using original text only]");
     }
