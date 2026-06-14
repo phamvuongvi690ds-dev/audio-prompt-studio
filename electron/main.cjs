@@ -239,27 +239,30 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||1));
     
-    const sys=`You are a professional AI translator and video prompt engineer.
+    const sys=`You are a high-fidelity AI translator and video prompt engineer.
 CRITICAL MANDATE: YOUR ENTIRE OUTPUT MUST BE IN ENGLISH.
-If you see Japanese text, Chinese characters (Kanji/Hanzi), or any non-English script, you MUST TRANSLATE it to English immediately.
-The final result must be a JSON array where every string is 100% English.
-DO NOT mirror the user's input language. OUTPUT = ENGLISH ONLY.`;
+CORE TASK: Translate and transform the source text into professional video prompts.
 
-    const promptReq = `[STRICT ENGLISH ONLY MODE]
-Convert this text into ${desiredCount} English video prompts. 
-If the text below is in Japanese, translation to English is YOUR FIRST STEP.
+FIDELITY RULES:
+1. DO NOT omit any meaningful details, names, or actions from the original text.
+2. If the input is Japanese/Vietnamese, your translation must be 100% accurate before adding visual descriptions.
+3. Every prompt must strictly follow the source material's context and tone.
+4. NO Japanese/Vietnamese characters allowed in the output.`;
 
-TEXT TO PROCESS:
+    const promptReq = `[STRICT FIDELITY & ENGLISH MODE]
+Transform the following text into exactly ${desiredCount} video prompts.
+
+SOURCE TEXT:
 "${p.originalText || raw}"
 
-STYLE CONTEXT:
+STYLE & CONTEXT:
 ${p.styleJson||'{}'}
 
-OUTPUT SPECIFICATION:
-- Number of prompts: ${desiredCount}
-- Language: 100% English (Forbidden: Japanese characters)
-- Format: "Scene XX | Camera: ... | Content: [English translation and scene description]"
-- Return Type: JSON array of strings only.`;
+SPECIFICATIONS:
+- Preserve all key information from the source.
+- Language: 100% English.
+- Format for each prompt: "Scene XX | Camera: [Angle] | Content: [Accurate English translation + Detailed visual description]"
+- Output: A JSON array of strings only.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
     
