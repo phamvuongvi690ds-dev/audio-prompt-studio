@@ -50,7 +50,7 @@ async function callApiGeneric({ bot, prompt }) {
         
         if (apiType === 'gemini') {
           const base = (geminiBaseUrl || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
-          url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          url = `${base}/v1/models/${model}:generateContent?key=${apiKey}`;
           headers = { 'Content-Type': 'application/json' };
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -59,7 +59,7 @@ async function callApiGeneric({ bot, prompt }) {
           });
         } else if (apiType === 'gateway') {
           const base = (baseUrl || 'https://fisher-fare-wiley-travelling.trycloudflare.com').replace(/\/$/, '');
-          url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          url = `${base}/v1/models/${model}:generateContent?key=${apiKey}`;
           headers = { 'Content-Type': 'application/json' };
           body = JSON.stringify({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
