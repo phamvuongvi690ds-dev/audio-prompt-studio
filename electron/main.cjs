@@ -52,29 +52,29 @@ async function callApiGeneric({ bot, prompt }) {
           const base = (geminiBaseUrl || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
           url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
           headers = { 'Content-Type': 'application/json' };
-          const fullPrompt = `SYSTEM INSTRUCTION: ${systemInstruction || ''}\n\nUSER PROMPT: ${prompt}\n\nFINAL REMINDER: OUTPUT MUST BE IN ENGLISH ONLY.`;
           body = JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-            system_instruction: { parts: [{ text: systemInstruction || '' }] }
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            system_instruction: { parts: [{ text: systemInstruction || '' }] },
+            generationConfig: { temperature: 0.7 }
           });
         } else if (apiType === 'gateway') {
           const base = (baseUrl || 'https://fisher-fare-wiley-travelling.trycloudflare.com').replace(/\/$/, '');
           url = `${base}/v1beta/models/${model}:generateContent?key=${apiKey}`;
           headers = { 'Content-Type': 'application/json' };
-          const fullPrompt = `SYSTEM INSTRUCTION: ${systemInstruction || ''}\n\nUSER PROMPT: ${prompt}\n\nFINAL REMINDER: OUTPUT MUST BE IN ENGLISH ONLY.`;
           body = JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-            system_instruction: { parts: [{ text: systemInstruction || '' }] }
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            system_instruction: { parts: [{ text: systemInstruction || '' }] },
+            generationConfig: { temperature: 0.7 }
           });
         } else if (apiType === 'vertex') {
           const token = await getVertexToken(serviceAccountPath);
           const keyData = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
           url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${keyData.project_id}/locations/us-central1/publishers/google/models/${model}:generateContent`;
           headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-          const fullPrompt = `SYSTEM INSTRUCTION: ${systemInstruction || ''}\n\nUSER PROMPT: ${prompt}\n\nFINAL REMINDER: OUTPUT MUST BE IN ENGLISH ONLY.`;
           body = JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-            system_instruction: { parts: [{ text: systemInstruction || '' }] }
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            system_instruction: { parts: [{ text: systemInstruction || '' }] },
+            generationConfig: { temperature: 0.7 }
           });
         } else if (apiType === 'openai') {
           url = `${(openaiBaseUrl || 'https://api.openai.com').replace(/\/$/, '')}/v1/chat/completions`;
@@ -207,7 +207,7 @@ function splitLongPromptText(text, count, dialog, subtitles){
   const per=Math.max(1, Math.ceil(sentences.length/count));
   for(let i=0;i<count;i++){
     const chunk=sentences.slice(i*per,(i+1)*per).join(' ').trim() || clean;
-    parts.push(`Scene ${String(i+1).padStart(2,'0')} – Story Beat | Character 1: based on the original text | Style: follow Style JSON | Camera: cinematic | Mood: consistent | Dialog: ${dialog?'yes':'none'} | Subtitles: ${subtitles?'ON':'OFF'} | Content: ${chunk}`);
+    parts.push(`Scene ${String(i+1).padStart(2,'0')} | Camera: Cinematic | Dialog: ${dialog?'Enabled':'None'} | Subtitles: ${subtitles?'ON':'OFF'} | Content: ${chunk}`);
   }
   return parts;
 }
@@ -241,28 +241,26 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||1));
     
-    const sys=`You are a professional video prompt engineer. 
-CRITICAL INSTRUCTION: Your output MUST be in ENGLISH. 
-Even if the input text is in Japanese, Vietnamese, or any other language, you MUST TRANSLATE it and generate the prompts strictly in ENGLISH.
-Your output MUST be a JSON array containing EXACTLY ${desiredCount} scene strings.`;
+    const sys=`You are a professional AI video prompt engineer.
+CRITICAL MANDATE: Your output MUST be in ENGLISH.
+Your task is to translate any input (Japanese, Vietnamese, etc.) into English first, then generate detailed video prompts.
+The final output MUST be a JSON array of exactly ${desiredCount} strings.
+DO NOT use Japanese or any other language in the output. ONLY ENGLISH.`;
 
-    const promptReq = `STRICT REQUIREMENT: GENERATE EVERYTHING IN ENGLISH.
+    const promptReq = `USER INPUT (MUST BE TRANSLATED TO ENGLISH):
+"${p.originalText || raw}"
 
-STYLE JSON:
-${p.styleJson||''}
+STYLE ANALYSIS JSON:
+${p.styleJson||'{}'}
 
-ORIGINAL TEXT (TRANSLATE THIS TO ENGLISH FOR THE PROMPTS):
-${p.originalText||''}
+INSTRUCTIONS:
+1. Translate the input text to English.
+2. Break the content into ${desiredCount} logical scenes.
+3. For each scene, create a descriptive video prompt in English.
+4. Format: Scene XX | Camera: ... | Mood: ... | Content: [English translation and description]
+5. Return ONLY a JSON array containing these ${desiredCount} strings.
 
-EXTRA REQUIREMENTS:
-${p.extraRequirement||''}
-
-AUDIO TRANSCRIPT:
-${raw}
-
-TASK: Generate exactly ${desiredCount} video prompts strictly in ENGLISH language. 
-Format for each string: Scene 01 – Title | Character 1: ... | Style: ... | Camera: ... | Mood: ... | Dialog: ${p.dialog?'Enabled':'None'} | Subtitles: ${p.subtitles?'ON':'OFF'}. 
-Return ONLY a JSON array of strings. NO Japanese, NO other languages.`;
+STRICT RULE: NO JAPANESE TEXT ALLOWED.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
     const out = outData?.choices?.[0]?.message?.content || outData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
