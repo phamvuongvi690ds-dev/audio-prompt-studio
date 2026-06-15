@@ -204,7 +204,7 @@ function splitLongPromptText(text, count, dialog, subtitles){
   const per=Math.max(1, Math.ceil(sentences.length/count));
   for(let i=0;i<count;i++){
     const chunk=sentences.slice(i*per,(i+1)*per).join(' ').trim() || clean;
-    parts.push(`Scene ${String(i+1).padStart(2,'0')} | Camera: Cinematic | Dialog: ${dialog?'Enabled':'None'} | Subtitles: ${subtitles?'ON':'OFF'} | Content: ${chunk}`);
+    parts.push(`Scene ${String(i+1).padStart(2,'0')} | Style: Cinematic | Character: Main Subject | Camera: Wide Shot | Action: ${chunk} | Sound: Ambient | Dialog: ${dialog?chunk:'None'} | Subtitles: ${subtitles?'ON':'OFF'}`);
   }
   return parts;
 }
@@ -241,16 +241,30 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     
     const sys=`You are a high-fidelity AI translator and video prompt engineer.
 CRITICAL MANDATE: YOUR ENTIRE OUTPUT MUST BE IN ENGLISH.
-CORE TASK: Translate and transform the source text into professional video prompts.
+
+CORE TASK:
+Transform the source text into professional video prompts using the EXACT structure below:
+[Style] | [Character] | [Camera] | [Action] | [Sound] | [Dialog] | [Subtitles]
 
 FIDELITY RULES:
-1. DO NOT omit any meaningful details, names, or actions from the original text.
-2. If the input is Japanese/Vietnamese, your translation must be 100% accurate before adding visual descriptions.
-3. Every prompt must strictly follow the source material's context and tone.
-4. NO Japanese/Vietnamese characters allowed in the output.`;
+1. Preserve all key details, names, and plot points.
+2. If the input is non-English, translate it accurately first.
+3. NO Japanese, Vietnamese, or other non-English characters.
 
-    const promptReq = `[STRICT FIDELITY & ENGLISH MODE]
-Transform the following text into exactly ${desiredCount} video prompts.
+STRUCTURE DEFINITION:
+- Style: The visual style (e.g., Cinematic, Anime, 3D Render) based on provided context.
+- Character: Main subjects in the scene and their appearance.
+- Camera: Shot type, angle, and movement.
+- Action: Detailed movement and events in the scene.
+- Sound: Background music, SFX, or ambient noise descriptions.
+- Dialog: The translated English spoken lines (or 'None' if none).
+- Subtitles: The text to be displayed on screen (or 'None' if none).`;
+
+    const promptReq = `[STRICT STRUCTURE MODE]
+Transform this text into exactly ${desiredCount} English prompts.
+
+STRUCTURE TO FOLLOW:
+Scene XX | Style: ... | Character: ... | Camera: ... | Action: ... | Sound: ... | Dialog: ... | Subtitles: ...
 
 SOURCE TEXT:
 "${p.originalText || raw}"
@@ -259,10 +273,8 @@ STYLE & CONTEXT:
 ${p.styleJson||'{}'}
 
 SPECIFICATIONS:
-- Preserve all key information from the source.
-- Language: 100% English.
-- Format for each prompt: "Scene XX | Camera: [Angle] | Content: [Accurate English translation + Detailed visual description]"
-- Output: A JSON array of strings only.`;
+- All parts MUST be in English.
+- Return a JSON array of strings.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
     
