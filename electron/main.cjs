@@ -204,7 +204,7 @@ function splitLongPromptText(text, count, dialog, subtitles){
   const per=Math.max(1, Math.ceil(sentences.length/count));
   for(let i=0;i<count;i++){
     const chunk=sentences.slice(i*per,(i+1)*per).join(' ').trim() || clean;
-    parts.push(`Scene ${String(i+1).padStart(2,'0')} | Style: Cinematic | Character: Main Subject | Camera: Wide Shot | Action: ${chunk} | Sound: Ambient | Dialog: ${dialog?chunk:'None'} | Subtitles: ${subtitles?'ON':'OFF'}`);
+    parts.push(`Scene ${String(i+1).padStart(2,'0')} – Part ${i+1} | Character 1: Main Subject | Character 2: [None] | Style: Cinematic | Character voices: [None] | Camera: Wide Shot | Setting: ${chunk} | Mood: Neutral | Audio cues: Ambient | Dialog: ${dialog?chunk:'[None]'} | Subtitles ${subtitles?'ON':'OFF'}`);
   }
   return parts;
 }
@@ -244,27 +244,19 @@ CRITICAL MANDATE: YOUR ENTIRE OUTPUT MUST BE IN ENGLISH.
 
 CORE TASK:
 Transform the source text into professional video prompts using the EXACT structure below:
-[Style] | [Character] | [Camera] | [Action] | [Sound] | [Dialog] | [Subtitles]
+Scene XX – [Title] | Character 1: [Description] | Character 2: [Description] | Style: [Details] | Character voices: [Details] | Camera: [Details] | Setting: [Details] | Mood: [Mood] | Audio cues: [Details] | Dialog: [English Text] | Subtitles [ON/OFF]
 
 FIDELITY RULES:
-1. Preserve all key details, names, and plot points.
-2. If the input is non-English, translate it accurately first.
-3. NO Japanese, Vietnamese, or other non-English characters.
-
-STRUCTURE DEFINITION:
-- Style: The visual style (e.g., Cinematic, Anime, 3D Render) based on provided context.
-- Character: Main subjects in the scene and their appearance.
-- Camera: Shot type, angle, and movement.
-- Action: Detailed movement and events in the scene.
-- Sound: Background music, SFX, or ambient noise descriptions.
-- Dialog: The translated English spoken lines (or 'None' if none).
-- Subtitles: The text to be displayed on screen (or 'None' if none).`;
+1. Preserve all key details, names, and plot points from the source.
+2. If the input is non-English, translate it accurately to English first.
+3. NO Japanese, Vietnamese, or other non-English characters allowed in output.
+4. If a field has no content, use [None].`;
 
     const promptReq = `[STRICT STRUCTURE MODE]
 Transform this text into exactly ${desiredCount} English prompts.
 
-STRUCTURE TO FOLLOW:
-Scene XX | Style: ... | Character: ... | Camera: ... | Action: ... | Sound: ... | Dialog: ... | Subtitles: ...
+STRUCTURE TO FOLLOW FOR EACH PROMPT:
+Scene XX – [Scene Title] | Character 1: [Detailed Description] | Character 2: [Detailed Description or None] | Style: [Visual Style Details] | Character voices: [Voice Details or None] | Camera: [Shot type/Movement] | Setting: [Environment Details] | Mood: [Emotional Tone] | Audio cues: [SFX/Music] | Dialog: [English Dialog or None] | Subtitles [ON/OFF]
 
 SOURCE TEXT:
 "${p.originalText || raw}"
@@ -273,7 +265,7 @@ STYLE & CONTEXT:
 ${p.styleJson||'{}'}
 
 SPECIFICATIONS:
-- All parts MUST be in English.
+- Language: 100% English.
 - Return a JSON array of strings.`;
 
     const outData = await callApiGeneric({ bot: { ...bot, systemInstruction: sys }, prompt: promptReq });
