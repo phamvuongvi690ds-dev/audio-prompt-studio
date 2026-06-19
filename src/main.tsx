@@ -143,6 +143,7 @@ function App() {
     setProgress(30);
 
     const r = await api().process({
+      apiType: transcriptionMode,
       apiKeys: apiKey,
       baseUrl: gatewayUrl,
       serviceAccountPath,

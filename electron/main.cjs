@@ -154,6 +154,23 @@ function ffmpegBin(){
 function runFfmpeg(args){ return spawnSync(ffmpegBin(), args, { encoding:'utf8', windowsHide:true }); }
 function mime(f){ const e=String(f).toLowerCase().split('.').pop(); if(e==='wav')return 'audio/wav'; if(e==='m4a')return 'audio/mp4'; return 'audio/mpeg'; }
 function parseKeys(input){ return String(input||'').split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean); }
+function validateBotIdentity(bot){
+  const apiType = bot.apiType || 'gemini';
+  if (apiType === 'localWhisper') return null;
+  if (apiType === 'vertex') {
+    if (!bot.serviceAccountPath) return 'Thiếu Service Account JSON cho Vertex OAuth. Hãy chọn file JSON rồi bấm Lưu cấu hình.';
+    if (!fs.existsSync(bot.serviceAccountPath)) return `Không tìm thấy Service Account JSON: ${bot.serviceAccountPath}`;
+    return null;
+  }
+  const keys = parseKeys(bot.apiKeys || bot.apiKey);
+  if (!keys.length) {
+    if (apiType === 'gemini') return 'Thiếu Gemini API Key. Hãy nhập key ở mục Gemini Keys rồi bấm Lưu cấu hình.';
+    if (apiType === 'gateway') return 'Thiếu Gateway API Key. Hãy nhập key ở mục Gateway Keys rồi bấm Lưu cấu hình.';
+    if (apiType === 'openai') return 'Thiếu OpenAI API Key. Hãy nhập key ở mục OpenAI Keys rồi bấm Lưu cấu hình.';
+    return 'Thiếu API Key.';
+  }
+  return null;
+}
 
 function mediaDurationSeconds(file){
   try{
@@ -215,7 +232,7 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
   try{
     ensure();
     const bot = {
-      apiType: p.apiType || 'gemini',
+      apiType: p.apiType || p.transcriptionMode || 'gemini',
       baseUrl: p.baseUrl,
       apiKeys: p.apiKeys || p.apiKey,
       serviceAccountPath: p.serviceAccountPath,
@@ -223,10 +240,13 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
       openaiBaseUrl: p.openaiBaseUrl,
       model: p.model
     };
+    const identityError = validateBotIdentity(bot);
+    if (identityError) throw new Error(identityError);
 
     const autoCountInfo=promptCountFromDuration(p.audioFile, Number(p.chunkSeconds||8));
     let transcripts=[];
     if(p.audioFile) {
+      if (bot.apiType === 'localWhisper') throw new Error('Local Whisper chưa được đóng gói trong bản setup này. Hãy chọn Gemini Direct, Gateway AI hoặc Vertex OAuth và nhập key/service account hợp lệ.');
       const tData = await callApiGeneric({ 
         bot: { ...bot, systemInstruction: 'You are a professional transcriber. You MUST translate the audio content to ENGLISH.' }, 
         prompt: `Transcribe and translate this audio content precisely to ENGLISH language.` 
