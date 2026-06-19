@@ -221,7 +221,7 @@ function splitLongPromptText(text, count, dialog, subtitles){
   const per=Math.max(1, Math.ceil(sentences.length/count));
   for(let i=0;i<count;i++){
     const chunk=sentences.slice(i*per,(i+1)*per).join(' ').trim() || clean;
-    parts.push(`Scene ${String(i+1).padStart(2,'0')} – Part ${i+1} | Character 1: Main Subject | Character 2: [None] | Style: Cinematic | Character voices: [None] | Camera: Wide Shot | Setting: ${chunk} | Mood: Neutral | Audio cues: Ambient | Dialog: ${dialog?chunk:'[None]'} | Subtitles ${subtitles?'ON':'OFF'}`);
+    parts.push(`Scene ${String(i+1).padStart(2,'0')} – Part ${i+1} | Setting: ${chunk} | Style: Cinematic | Character: Main Subject | Action: Unique visual moment based on this scene segment | Subtitles ${subtitles?'ON':'OFF'} | Dialog: ${dialog?chunk:'[None]'}`);
   }
   return parts;
 }
@@ -264,19 +264,21 @@ CRITICAL MANDATE: YOUR ENTIRE OUTPUT MUST BE IN ENGLISH.
 
 CORE TASK:
 Transform the source text into professional video prompts using the EXACT structure below:
-Scene XX – [Title] | Character 1: [Description] | Character 2: [Description] | Style: [Details] | Character voices: [Details] | Camera: [Details] | Setting: [Details] | Mood: [Mood] | Audio cues: [Details] | Dialog: [English Text] | Subtitles [ON/OFF]
+Scene XX – [Scene Title] | Setting: [Background/Environment] | Style: [Visual Style] | Character: [Character Details] | Action: [Unique Scene Action] | Subtitles [ON/OFF] | Dialog: [English Dialog or [None]]
 
 FIDELITY RULES:
 1. Preserve all key details, names, and plot points from the source.
 2. If the input is non-English, translate it accurately to English first.
 3. NO Japanese, Vietnamese, or other non-English characters allowed in output.
-4. If a field has no content, use [None].`;
+4. If a field has no content, use [None].
+5. DO NOT repeat the same Setting, Character pose, Action, or Dialog across scenes.
+6. Each scene must advance the source content with a distinct visual moment.`;
 
     const promptReq = `[STRICT STRUCTURE MODE]
 Transform this text into exactly ${desiredCount} English prompts.
 
 STRUCTURE TO FOLLOW FOR EACH PROMPT:
-Scene XX – [Scene Title] | Character 1: [Detailed Description] | Character 2: [Detailed Description or None] | Style: [Visual Style Details] | Character voices: [Voice Details or None] | Camera: [Shot type/Movement] | Setting: [Environment Details] | Mood: [Emotional Tone] | Audio cues: [SFX/Music] | Dialog: [English Dialog or None] | Subtitles [ON/OFF]
+Scene XX – [Scene Title] | Setting: [Background/Environment] | Style: [Visual Style] | Character: [Character Details] | Action: [Unique Scene Action] | Subtitles [ON/OFF] | Dialog: [English Dialog or [None]]
 
 SOURCE TEXT:
 "${p.originalText || raw}"
@@ -285,6 +287,9 @@ STYLE & CONTEXT:
 ${p.styleJson||'{}'}
 
 SPECIFICATIONS:
+- Required order: Setting → Style → Character → Action → Subtitles → Dialog.
+- No repeated sentences between scenes.
+- No repeated visual description between scenes unless the source explicitly requires it.
 - Language: 100% English.
 - Return a JSON array of strings.`;
 
