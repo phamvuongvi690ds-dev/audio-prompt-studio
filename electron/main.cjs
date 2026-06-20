@@ -261,6 +261,7 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     const subtitlesState = p.subtitles ? 'ON' : 'OFF';
     const dialogState = p.dialog ? 'ON' : 'OFF';
     const extraRequirement = String(p.extraRequirement || '').trim();
+    const characterSyncEnabled = /character|nhân vật|nhan vat|đồng bộ|dong bo|consistent|sync|same character|character bible/i.test(extraRequirement);
     
     const sys=`You are a high-fidelity AI translator and video prompt engineer.
 CRITICAL MANDATE: YOUR ENTIRE OUTPUT MUST BE IN ENGLISH.
@@ -278,7 +279,8 @@ FIDELITY RULES:
 6. Each scene must advance the source content with a distinct visual moment.
 7. Apply the user's EXTRA REQUIREMENTS exactly when provided.
 8. Subtitles field must be exactly "Subtitles ${subtitlesState}: ...". If subtitles are OFF, use "Subtitles OFF: [None]". If subtitles are ON, create concise English subtitle text matching that scene's source content.
-9. Dialog is ${dialogState}. If dialog is OFF, use "Dialog: [None]". If dialog is ON, write English dialog matching the source content.`;
+9. Dialog is ${dialogState}. If dialog is OFF, use "Dialog: [None]". If dialog is ON, write English dialog matching the source content.
+10. CHARACTER SYNC MODE is ${characterSyncEnabled ? 'ON' : 'OFF'}. When ON, extract the character description from EXTRA REQUIREMENTS and reuse the exact same identity across every scene. Keep age, gender, ethnicity, face, hair, outfit, body type, and signature accessories consistent. Only change pose/action/expression when needed. Do not invent a different character in later scenes.`;
 
     const promptReq = `[STRICT STRUCTURE MODE]
 Transform this text into exactly ${desiredCount} English prompts.
@@ -295,11 +297,15 @@ ${p.styleJson||'{}'}
 EXTRA REQUIREMENTS FROM USER:
 ${extraRequirement || '[None]'}
 
+CHARACTER SYNC MODE:
+${characterSyncEnabled ? 'ON — Treat EXTRA REQUIREMENTS as the locked character bible. Repeat the same core character identity in the Character field of every scene. Do not change the character unless the source explicitly introduces another character.' : 'OFF — Use characters from the source text normally.'}
+
 SPECIFICATIONS:
 - Required order: Setting → Style → Character → Action → Subtitles → Dialog.
 - Apply EXTRA REQUIREMENTS exactly if not [None].
 - Subtitles must be exactly ${subtitlesState}. ${p.subtitles ? 'Write concise English subtitle text that matches each scene.' : 'Use Subtitles OFF: [None] for every scene.'}
 - Dialog must be exactly ${dialogState}. ${p.dialog ? 'Write English dialog that matches the source content.' : 'Use Dialog: [None] for every scene.'}
+- If CHARACTER SYNC MODE is ON, every scene's Character field must contain the same locked character identity from EXTRA REQUIREMENTS, with only pose/action/expression allowed to vary.
 - No repeated sentences between scenes.
 - No repeated visual description between scenes unless the source explicitly requires it.
 - Language: 100% English.
