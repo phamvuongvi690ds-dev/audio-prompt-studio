@@ -258,13 +258,16 @@ ipcMain.handle('audio:process', async(_e,p={})=>{
     }
     const raw=transcripts.join('\n');
     const desiredCount=Math.max(1, Number(p.targetPromptCount||autoCountInfo.promptCount||1));
+    const subtitlesState = p.subtitles ? 'ON' : 'OFF';
+    const dialogState = p.dialog ? 'ON' : 'OFF';
+    const extraRequirement = String(p.extraRequirement || '').trim();
     
     const sys=`You are a high-fidelity AI translator and video prompt engineer.
 CRITICAL MANDATE: YOUR ENTIRE OUTPUT MUST BE IN ENGLISH.
 
 CORE TASK:
 Transform the source text into professional video prompts using the EXACT structure below:
-Scene XX – [Scene Title] | Setting: [Background/Environment] | Style: [Visual Style] | Character: [Character Details] | Action: [Unique Scene Action] | Subtitles [ON/OFF] | Dialog: [English Dialog or [None]]
+Scene XX – [Scene Title] | Setting: [Background/Environment] | Style: [Visual Style] | Character: [Character Details] | Action: [Unique Scene Action] | Subtitles ${subtitlesState}: [English subtitle text or [None]] | Dialog: [English Dialog or [None]]
 
 FIDELITY RULES:
 1. Preserve all key details, names, and plot points from the source.
@@ -272,13 +275,16 @@ FIDELITY RULES:
 3. NO Japanese, Vietnamese, or other non-English characters allowed in output.
 4. If a field has no content, use [None].
 5. DO NOT repeat the same Setting, Character pose, Action, or Dialog across scenes.
-6. Each scene must advance the source content with a distinct visual moment.`;
+6. Each scene must advance the source content with a distinct visual moment.
+7. Apply the user's EXTRA REQUIREMENTS exactly when provided.
+8. Subtitles field must be exactly "Subtitles ${subtitlesState}: ...". If subtitles are OFF, use "Subtitles OFF: [None]". If subtitles are ON, create concise English subtitle text matching that scene's source content.
+9. Dialog is ${dialogState}. If dialog is OFF, use "Dialog: [None]". If dialog is ON, write English dialog matching the source content.`;
 
     const promptReq = `[STRICT STRUCTURE MODE]
 Transform this text into exactly ${desiredCount} English prompts.
 
 STRUCTURE TO FOLLOW FOR EACH PROMPT:
-Scene XX – [Scene Title] | Setting: [Background/Environment] | Style: [Visual Style] | Character: [Character Details] | Action: [Unique Scene Action] | Subtitles [ON/OFF] | Dialog: [English Dialog or [None]]
+Scene XX – [Scene Title] | Setting: [Background/Environment] | Style: [Visual Style] | Character: [Character Details] | Action: [Unique Scene Action] | Subtitles ${subtitlesState}: [English subtitle text or [None]] | Dialog: [English Dialog or [None]]
 
 SOURCE TEXT:
 "${p.originalText || raw}"
@@ -286,8 +292,14 @@ SOURCE TEXT:
 STYLE & CONTEXT:
 ${p.styleJson||'{}'}
 
+EXTRA REQUIREMENTS FROM USER:
+${extraRequirement || '[None]'}
+
 SPECIFICATIONS:
 - Required order: Setting → Style → Character → Action → Subtitles → Dialog.
+- Apply EXTRA REQUIREMENTS exactly if not [None].
+- Subtitles must be exactly ${subtitlesState}. ${p.subtitles ? 'Write concise English subtitle text that matches each scene.' : 'Use Subtitles OFF: [None] for every scene.'}
+- Dialog must be exactly ${dialogState}. ${p.dialog ? 'Write English dialog that matches the source content.' : 'Use Dialog: [None] for every scene.'}
 - No repeated sentences between scenes.
 - No repeated visual description between scenes unless the source explicitly requires it.
 - Language: 100% English.
